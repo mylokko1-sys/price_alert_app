@@ -1,0 +1,42 @@
+name: hh_ll_alert_bot
+description: HH/LL Breakout Alert Bot for Crypto Trading
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # HTTP requests (Binance API + Telegram)
+  http: ^1.2.0
+
+  # Background service (runs even when app is closed)b
+  flutter_background_service: ^5.0.5
+  flutter_background_service_android: ^6.2.2
+
+  # Local storage (save config + alerted levels)
+  shared_preferences: ^2.2.3
+
+  # Notifications (show alert in notification bar)
+  flutter_local_notifications: ^17.2.2
+
+  # Icons
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  flutter_launcher_icons: "^0.14.4"
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/my_icon.png"   # ← change here
+  min_sdk_android: 21
+
+flutter:
+  uses-material-design: true
