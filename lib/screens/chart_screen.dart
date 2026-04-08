@@ -2,12 +2,12 @@
 // Interactive candlestick chart
 //   • Live price auto-refresh every 15 s
 //   • 9 months of historical data with gap-fill
-//   • Multi-pair switcher with search
+//   • Multi-pair switcher (drawings persist per symbol)
 //   • Pinch-zoom · Pan · Crosshair
 //   • Auto-scale toggle
 //   • Draw Trend Lines & Horizontal Lines
 //   • Select, Move drawn lines (tap to select, drag to move)
-//   • Set price alerts on drawn lines
+//   • Set price alerts on drawn lines (fires in real-time via live refresh)
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -16,6 +16,7 @@ import 'package:flutter/services.dart';
 
 import '../config.dart';
 import '../services/binance_service.dart';
+import '../services/telegram_service.dart';
 import '../services/pivot_service.dart';
 
 // ══════════════════════════════════════════════════════════
@@ -24,7 +25,6 @@ import '../services/pivot_service.dart';
 
 enum DrawTool { cursor, trendLine, hLine }
 
-// Which handle of a trend-line is being dragged
 enum _TlHandle { p1, p2, body }
 
 class TrendLineData {
@@ -59,7 +59,6 @@ class TrendLineData {
     hasAlert: hasAlert ?? this.hasAlert,
   );
 
-  // Interpolate price at a given candle index
   double priceAt(int idx) {
     if (idx1 == idx2) return price1;
     return price1 + (price2 - price1) * (idx - idx1) / (idx2 - idx1);
@@ -121,12 +120,13 @@ class _ChartScreenState extends State<ChartScreen>
   // ── Live price ────────────────────────────────────────
   Timer?  _liveTimer;
   double? _livePrice;
+  double? _prevLivePrice; // ← tracks previous tick for crossing detection
 
   // ── Viewport ──────────────────────────────────────────
   static const double _rightPadCandles = 3.0;
   static const double _priceAxisW      = 66.0;
   static const double _timeAxisH       = 26.0;
-  static const double _hitSlop         = 14.0; // px tolerance for hit-test
+  static const double _hitSlop         = 14.0;
 
   double _candleWidth   = 8.0;
   double _scrollCandles = 0.0;
@@ -143,16 +143,14 @@ class _ChartScreenState extends State<ChartScreen>
   final List<TrendLineData> _trendLines = [];
   final List<HorizLineData> _horizLines = [];
 
-  // Pending 1st point of trend line
   int?    _pendingIdx;
   double? _pendingPrice;
 
   // ── Selection & Move state ────────────────────────────
-  String?    _selId;      // selected line id
+  String?    _selId;
   bool       _isMoving    = false;
-  _TlHandle? _dragHandle; // which part of trend line is being dragged
+  _TlHandle? _dragHandle;
 
-  // anchor values at drag-start
   double _dragAnchorPrice  = 0;
   int    _dragAnchorIdx    = 0;
   double _dragAnchorPrice1 = 0;
@@ -174,6 +172,17 @@ class _ChartScreenState extends State<ChartScreen>
 
   // ── Touch pos for rubber-band preview ─────────────────
   Offset? _touchPos;
+
+  // ── Drawings persistence: keyed by symbol ─────────────
+  // Drawings are saved when switching symbols and restored
+  // when returning to the same symbol.
+  final Map<String, List<TrendLineData>> _drawingsBySymbol = {};
+  final Map<String, List<HorizLineData>> _horizBySymbol    = {};
+
+  // ── Alert dedup: prevents re-alerting the same line ───
+  // A line ID is added when it fires; removed when price
+  // moves >0.5% away so it can fire again on next approach.
+  final Set<String> _alertedLineIds = {};
 
   // ── Chart size (set by LayoutBuilder) ─────────────────
   Size _chartSize = Size.zero;
@@ -222,8 +231,11 @@ class _ChartScreenState extends State<ChartScreen>
       _loading = true; _error = null;
       _candles = []; _selectedIdx = null;
       _crosshair = null; _livePrice = null;
+      _prevLivePrice = null;
       _pendingIdx = null; _pendingPrice = null;
       _touchPos = null; _selId = null; _isMoving = false;
+      // ← Do NOT clear _trendLines/_horizLines here;
+      //   _restoreDrawings() repopulates them after fetch.
     });
     try {
       final candles = await BinanceService.fetchCandlesForChart(
@@ -236,6 +248,8 @@ class _ChartScreenState extends State<ChartScreen>
         _lastUpdated   = DateTime.now();
         if (_autoScale) _captureRange(candles);
       });
+      // Restore saved drawings for this symbol (after data is ready)
+      _restoreDrawings();
     } catch (e) {
       if (!mounted) return;
       setState(() { _error = e.toString(); _loading = false; });
@@ -250,6 +264,11 @@ class _ChartScreenState extends State<ChartScreen>
       final recent = await BinanceService.fetchCandlesFrom(
           _symbol, _timeframe, _candles.last.time);
       if (!mounted) return;
+
+      // Capture previous price BEFORE updating state
+      final prevPrice = _prevLivePrice ??
+          (_candles.isNotEmpty ? _candles.last.close : null);
+
       setState(() {
         _livePrice   = price;
         _lastUpdated = DateTime.now();
@@ -264,6 +283,14 @@ class _ChartScreenState extends State<ChartScreen>
         }
         _refreshing = false;
       });
+
+      // Track for next tick
+      _prevLivePrice = price;
+
+      // ── Check drawn-line alerts ──────────────────────
+      if (price != null && prevPrice != null) {
+        _checkDrawnLineAlerts(price, prevPrice);
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() => _refreshing = false);
@@ -274,6 +301,165 @@ class _ChartScreenState extends State<ChartScreen>
     _liveTimer?.cancel();
     _liveTimer = Timer.periodic(
         const Duration(seconds: 15), (_) => _liveRefresh());
+  }
+
+  // ══════════════════════════════════════════════════════
+  // DRAWINGS PERSISTENCE
+  // ══════════════════════════════════════════════════════
+
+  /// Call before switching to a different symbol.
+  /// Saves current trendLines + horizLines under the current symbol key.
+  void _saveCurrentDrawings() {
+    _drawingsBySymbol[_symbol] =
+        _trendLines.map((t) => t.copyWith()).toList();
+    _horizBySymbol[_symbol] =
+        _horizLines.map((h) => h.copyWith()).toList();
+  }
+
+  /// Call after fetching history for _symbol.
+  /// Repopulates _trendLines / _horizLines from the saved maps.
+  void _restoreDrawings() {
+    setState(() {
+      _trendLines
+        ..clear()
+        ..addAll(_drawingsBySymbol[_symbol] ?? []);
+      _horizLines
+        ..clear()
+        ..addAll(_horizBySymbol[_symbol] ?? []);
+    });
+    _alertedLineIds.clear(); // reset alert dedup when context changes
+  }
+
+  // ══════════════════════════════════════════════════════
+  // DRAWN-LINE ALERT LOGIC (runs on every live-refresh tick)
+  // ══════════════════════════════════════════════════════
+
+  /// Checks all drawn lines with hasAlert == true.
+  /// Fires a Telegram notification + snackbar on crossing.
+  void _checkDrawnLineAlerts(double current, double prev) {
+    final hasHAlerts = _horizLines.any((h) => h.hasAlert);
+    final hasTAlerts = _trendLines.any((t) => t.hasAlert);
+    if (!hasHAlerts && !hasTAlerts) return;
+
+    final currentIdx = _candles.isEmpty ? 0 : _candles.length - 1;
+
+    // ── Horizontal lines ─────────────────────────────
+    for (final hl in List<HorizLineData>.from(_horizLines)) {
+      if (!hl.hasAlert) continue;
+
+      // If already alerted, reset dedup when price is >0.5% away
+      if (_alertedLineIds.contains(hl.id)) {
+        if (hl.price != 0 &&
+            (current - hl.price).abs() / hl.price.abs() > 0.005) {
+          _alertedLineIds.remove(hl.id);
+        }
+        continue;
+      }
+
+      if (_priceCrossedLevel(current, prev, hl.price)) {
+        _alertedLineIds.add(hl.id);
+        _sendDrawnLineHitAlert(
+          lineType:  'Horizontal Line',
+          linePrice: hl.price,
+          current:   current,
+        );
+      }
+    }
+
+    // ── Trend lines ───────────────────────────────────
+    for (final tl in List<TrendLineData>.from(_trendLines)) {
+      if (!tl.hasAlert) continue;
+
+      final linePrice = tl.priceAt(currentIdx);
+
+      // Reset dedup when price is >0.5% away
+      if (_alertedLineIds.contains(tl.id)) {
+        if (linePrice != 0 &&
+            (current - linePrice).abs() / linePrice.abs() > 0.005) {
+          _alertedLineIds.remove(tl.id);
+        }
+        continue;
+      }
+
+      if (_priceCrossedLevel(current, prev, linePrice)) {
+        _alertedLineIds.add(tl.id);
+        _sendDrawnLineHitAlert(
+          lineType:  'Trend Line',
+          linePrice: linePrice,
+          current:   current,
+        );
+      }
+    }
+  }
+
+  /// Returns true when the live price either crossed through [level]
+  /// or is within 0.2% of it (touch tolerance).
+  bool _priceCrossedLevel(double current, double prev, double level) {
+    // Crossed from below or above
+    if ((prev < level && current >= level) ||
+        (prev > level && current <= level)) return true;
+    // Touch: within 0.2%
+    if (level == 0) return false;
+    return (current - level).abs() / level.abs() <= 0.002;
+  }
+
+  /// Sends a Telegram message and shows an in-app snackbar.
+  Future<void> _sendDrawnLineHitAlert({
+    required String lineType,
+    required double linePrice,
+    required double current,
+  }) async {
+    // Pick the best configured bot
+    TelegramBot? bot;
+    try {
+      bot = Config.bots
+          .firstWhere((b) => b.isConfigured && b.canReceiveManualAlerts);
+    } catch (_) {
+      try {
+        bot = Config.bots.firstWhere((b) => b.isConfigured);
+      } catch (_) {}
+    }
+    if (bot == null) return;
+
+    final ok = await TelegramService.sendDrawnLineHitAlert(
+      bot:          bot,
+      symbol:       _symbol,
+      timeframe:    _timeframe,
+      lineType:     lineType,
+      linePrice:    linePrice,
+      currentPrice: current,
+    );
+
+    if (!mounted) return;
+
+    // Always show snackbar (even if Telegram send failed)
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Row(children: [
+        Icon(
+          ok
+              ? Icons.notifications_active_rounded
+              : Icons.notifications_off_rounded,
+          color: Colors.white,
+          size: 16,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            ok
+                ? '🎯 $_symbol $lineType hit @ ${_fmtP(linePrice)}'
+                : '⚠️ Line hit but Telegram send failed',
+            style: const TextStyle(fontSize: 12.5),
+          ),
+        ),
+      ]),
+      backgroundColor:
+          ok ? Colors.orange.shade800 : Colors.red.shade700,
+      behavior: SnackBarBehavior.floating,
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      margin: const EdgeInsets.all(12),
+      duration: const Duration(seconds: 5),
+    ));
   }
 
   // ══════════════════════════════════════════════════════
@@ -298,7 +484,6 @@ class _ChartScreenState extends State<ChartScreen>
   double _y2p(double y, _PriceRange r) =>
       r.lo + (1 - y / _cH) * (r.hi - r.lo);
 
-  // Screen-x → candle index (inverse of _cX)
   int _x2idx(double x) {
     final rightPx = _rightPadCandles * _candleWidth;
     final i = _lastVis -
@@ -349,7 +534,6 @@ class _ChartScreenState extends State<ChartScreen>
   // HIT TESTING
   // ══════════════════════════════════════════════════════
 
-  // Distance from point to infinite line through (x1,y1)-(x2,y2)
   double _pointToLineDistance(
       double px, double py, double x1, double y1, double x2, double y2) {
     final dx = x2 - x1;
@@ -361,31 +545,22 @@ class _ChartScreenState extends State<ChartScreen>
     return ((dy * px - dx * py + x2 * y1 - y2 * x1) / math.sqrt(len2)).abs();
   }
 
-  // Returns: ('h', id) or ('t', id) or null
-  // Also sets _dragHandle for trend lines
   _HitResult? _hitTest(Offset pos, _PriceRange r) {
-    // ── Horizontal lines ───────────────────────────────
     for (final hl in _horizLines) {
       final y = _p2y(hl.price, r);
       if ((pos.dy - y).abs() < _hitSlop && pos.dx <= _cW) {
         return _HitResult('h', hl.id, _TlHandle.body);
       }
     }
-
-    // ── Trend lines ────────────────────────────────────
     for (final tl in _trendLines) {
       final x1 = _cX(tl.idx1); final y1 = _p2y(tl.price1, r);
       final x2 = _cX(tl.idx2); final y2 = _p2y(tl.price2, r);
-
-      // Endpoint handles (priority)
       if ((pos - Offset(x1, y1)).distance < _hitSlop + 4) {
         return _HitResult('t', tl.id, _TlHandle.p1);
       }
       if ((pos - Offset(x2, y2)).distance < _hitSlop + 4) {
         return _HitResult('t', tl.id, _TlHandle.p2);
       }
-
-      // Line body
       final dist = _pointToLineDistance(pos.dx, pos.dy, x1, y1, x2, y2);
       if (dist < _hitSlop && pos.dx <= _cW) {
         return _HitResult('t', tl.id, _TlHandle.body);
@@ -407,14 +582,12 @@ class _ChartScreenState extends State<ChartScreen>
     _isMoving     = false;
     _dragHandle   = null;
 
-    // Check if starting on an existing line (cursor mode)
     if (_candles.isEmpty || d.pointerCount > 1) return;
     if (_drawTool != DrawTool.cursor) return;
 
     final r    = _activeRange;
     final hit  = _hitTest(d.localFocalPoint, r);
     if (hit != null) {
-      // Start moving the hit line
       _selId      = hit.id;
       _isMoving   = true;
       _dragHandle = hit.handle;
@@ -443,7 +616,6 @@ class _ChartScreenState extends State<ChartScreen>
       _tapMoved = true;
     }
 
-    // ── 2-finger: always zoom & pan ───────────────────
     if (d.pointerCount >= 2) {
       setState(() {
         _candleWidth =
@@ -458,7 +630,6 @@ class _ChartScreenState extends State<ChartScreen>
       return;
     }
 
-    // ── 1-finger: moving a line ────────────────────────
     if (_isMoving && _selId != null && _tapMoved) {
       final r     = _activeRange;
       final diffY = d.localFocalPoint.dy - _dragStartPos.dy;
@@ -492,7 +663,6 @@ class _ChartScreenState extends State<ChartScreen>
             price2: _dragAnchorPrice2 + priceDelta,
           );
         } else {
-          // Move entire line
           _trendLines[tiIdx] = tl.copyWith(
             idx1:   (_dragAnchorIdx1 + idxDelta).clamp(0, hiIdx),
             price1: _dragAnchorPrice1 + priceDelta,
@@ -504,7 +674,6 @@ class _ChartScreenState extends State<ChartScreen>
       return;
     }
 
-    // ── 1-finger: cursor mode pan + crosshair ─────────
     if (_drawTool == DrawTool.cursor && _tapMoved && !_isMoving) {
       setState(() {
         _candleWidth =
@@ -520,15 +689,14 @@ class _ChartScreenState extends State<ChartScreen>
       return;
     }
 
-    // ── 1-finger: draw mode — just update preview ──────
     if (_drawTool != DrawTool.cursor) {
       setState(() {});
     }
   }
 
   void _onScaleEnd(ScaleEndDetails d) {
-    final wasTap     = !_tapMoved && _tapPointers == 1;
-    final wasMoving  = _isMoving;
+    final wasTap    = !_tapMoved && _tapPointers == 1;
+    final tapPos    = _gStartFocal;
 
     setState(() {
       _crosshair   = null;
@@ -539,28 +707,21 @@ class _ChartScreenState extends State<ChartScreen>
     });
 
     if (!wasTap) return;
-    final tapPos = _gStartFocal;
 
-    // ── Tap in cursor mode ────────────────────────────
     if (_drawTool == DrawTool.cursor) {
       final r   = _activeRange;
       final hit = _hitTest(tapPos, r);
       if (hit != null) {
-        // Select or deselect the tapped line
         setState(() => _selId = (_selId == hit.id) ? null : hit.id);
-
-        // If already selected, show actions panel
         if (_selId == hit.id) {
           _showLineActions(hit.id, hit.type);
         }
       } else {
-        // Tap on empty space → deselect
         setState(() => _selId = null);
       }
       return;
     }
 
-    // ── Tap in draw mode ──────────────────────────────
     _handleDrawTap(tapPos);
   }
 
@@ -581,7 +742,7 @@ class _ChartScreenState extends State<ChartScreen>
         _horizLines.add(HorizLineData(
             id: _nextId(), price: price, color: _nextColor()));
         _selId = _horizLines.last.id;
-        _drawTool = DrawTool.cursor; // auto-switch back
+        _drawTool = DrawTool.cursor;
       } else if (_drawTool == DrawTool.trendLine) {
         if (_pendingIdx == null) {
           _pendingIdx   = idx;
@@ -596,7 +757,7 @@ class _ChartScreenState extends State<ChartScreen>
           _selId        = _trendLines.last.id;
           _pendingIdx   = null;
           _pendingPrice = null;
-          _drawTool     = DrawTool.cursor; // auto-switch back
+          _drawTool     = DrawTool.cursor;
         }
       }
     });
@@ -633,93 +794,74 @@ class _ChartScreenState extends State<ChartScreen>
           setState(() {
             _horizLines.removeWhere((l) => l.id == id);
             _trendLines.removeWhere((l) => l.id == id);
+            _alertedLineIds.remove(id);
             _selId = null;
           });
         },
         onSetAlert: (botId, condition) {
           Navigator.pop(context);
-          _saveLineAlert(id, type, botId, condition);
+          _activateLineAlert(id, type);
         },
         onRemoveAlert: () {
           Navigator.pop(context);
-          _removeLineAlert(id, type);
+          _deactivateLineAlert(id, type);
         },
       ),
     );
   }
 
-  void _saveLineAlert(String id, String type, String botId, String condition) async {
-    final isH = type == 'h';
-
-    double targetPrice;
-    String label;
-
-    if (isH) {
-      final hl = _horizLines.firstWhere((l) => l.id == id);
-      targetPrice = hl.price;
-      label = 'H-Line $_symbol @ ${_fmtP(targetPrice)}';
-      setState(() {
+  /// Marks a drawn line as having an active alert (hasAlert = true).
+  void _activateLineAlert(String id, String type) {
+    setState(() {
+      if (type == 'h') {
         final i = _horizLines.indexWhere((l) => l.id == id);
         if (i >= 0) _horizLines[i] = _horizLines[i].copyWith(hasAlert: true);
-      });
-    } else {
-      final tl = _trendLines.firstWhere((l) => l.id == id);
-      targetPrice = tl.priceAt(_candles.length - 1);
-      label = 'Trend $_symbol @ ${_fmtP(targetPrice)}';
-      setState(() {
+      } else {
         final i = _trendLines.indexWhere((l) => l.id == id);
         if (i >= 0) _trendLines[i] = _trendLines[i].copyWith(hasAlert: true);
-      });
-    }
-
-    final alert = PriceAlert(
-      id:          'LINE_${id}_${DateTime.now().millisecondsSinceEpoch}',
-      symbol:      _symbol,
-      targetPrice: targetPrice,
-      condition:   condition,
-      botId:       botId,
-      label:       label,
-      isActive:    true,
-      isTriggered: false,
-    );
-
-    final updated = List<PriceAlert>.from(Config.priceAlerts)..add(alert);
-    await ConfigService.savePriceAlerts(updated);
+      }
+      // Remove from dedup so it can fire immediately on next hit
+      _alertedLineIds.remove(id);
+    });
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: const Row(children: [
-          Icon(Icons.notifications_active, color: Colors.white, size: 16),
+          Icon(Icons.notifications_active_rounded,
+              color: Colors.white, size: 16),
           SizedBox(width: 8),
-          Text('Alert set for this line'),
+          Text('Alert set — fires when price hits this line'),
         ]),
         backgroundColor: Colors.green.shade700,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         margin: const EdgeInsets.all(12),
         duration: const Duration(seconds: 2),
       ));
     }
   }
 
-  void _removeLineAlert(String id, String type) async {
-    if (type == 'h') {
-      setState(() {
+  /// Removes the alert from a drawn line (hasAlert = false).
+  void _deactivateLineAlert(String id, String type) {
+    setState(() {
+      if (type == 'h') {
         final i = _horizLines.indexWhere((l) => l.id == id);
         if (i >= 0) _horizLines[i] = _horizLines[i].copyWith(hasAlert: false);
-      });
-    } else {
-      setState(() {
+      } else {
         final i = _trendLines.indexWhere((l) => l.id == id);
         if (i >= 0) _trendLines[i] = _trendLines[i].copyWith(hasAlert: false);
-      });
-    }
-    final prefix = 'LINE_${id}_';
-    final updated = Config.priceAlerts
-        .where((a) => !a.id.startsWith(prefix))
-        .toList();
-    await ConfigService.savePriceAlerts(updated);
+      }
+      _alertedLineIds.remove(id);
+    });
   }
+
+  // ── Legacy helpers kept for backwards compat ──────────
+  void _saveLineAlert(String id, String type, String botId, String condition) =>
+      _activateLineAlert(id, type);
+
+  void _removeLineAlert(String id, String type) =>
+      _deactivateLineAlert(id, type);
 
   // ══════════════════════════════════════════════════════
   // PAIR SELECTOR
@@ -737,13 +879,15 @@ class _ChartScreenState extends State<ChartScreen>
         onSelect:   (sym) {
           Navigator.pop(context);
           if (sym != _symbol) {
+            // ── Save drawings for current symbol ────────
+            _saveCurrentDrawings();
             setState(() {
-              _symbol = sym;
-              _trendLines.clear();
-              _horizLines.clear();
+              _symbol       = sym;
               _pendingIdx   = null;
               _pendingPrice = null;
               _selId        = null;
+              // ← intentionally NOT clearing _trendLines/_horizLines;
+              //   _restoreDrawings() will replace them after fetch.
             });
             _fetchHistory();
           }
@@ -855,7 +999,12 @@ class _ChartScreenState extends State<ChartScreen>
         ..._timeframes.map((tf) {
           final sel = tf == _timeframe;
           return GestureDetector(
-            onTap: () { if (tf != _timeframe) { setState(() => _timeframe = tf); _fetchHistory(); } },
+            onTap: () {
+              if (tf != _timeframe) {
+                setState(() => _timeframe = tf);
+                _fetchHistory();
+              }
+            },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
               margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
@@ -885,6 +1034,10 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Widget _buildDrawToolbar() {
+    final totalAlerts =
+        _horizLines.where((h) => h.hasAlert).length +
+        _trendLines.where((t) => t.hasAlert).length;
+
     return Container(
       height: 38, color: const Color(0xFF0D0D1A),
       padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -916,6 +1069,27 @@ class _ChartScreenState extends State<ChartScreen>
             _pendingIdx = null; _pendingPrice = null;
           }),
         ),
+        // Active alert badge
+        if (totalAlerts > 0) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.orange.withOpacity(0.5)),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.notifications_active_rounded,
+                  size: 11, color: Colors.orange),
+              const SizedBox(width: 3),
+              Text('$totalAlerts',
+                  style: const TextStyle(
+                      fontSize: 10, color: Colors.orange,
+                      fontWeight: FontWeight.bold)),
+            ]),
+          ),
+        ],
         const Spacer(),
         // Auto-scale
         GestureDetector(
@@ -947,7 +1121,8 @@ class _ChartScreenState extends State<ChartScreen>
           GestureDetector(
             onTap: () => setState(() {
               _trendLines.clear(); _horizLines.clear();
-              _pendingIdx = null; _pendingPrice = null; _selId = null;
+              _pendingIdx = null; _pendingPrice = null;
+              _selId = null; _alertedLineIds.clear();
             }),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1016,24 +1191,24 @@ class _ChartScreenState extends State<ChartScreen>
         final priceRange = _activeRange;
         return CustomPaint(
           painter: _ChartPainter(
-            candles:         _candles,
-            candleWidth:     _candleWidth,
-            scrollCandles:   _scrollCandles,
-            rightPadCandles: _rightPadCandles,
-            trendLines:      List.unmodifiable(_trendLines),
-            horizLines:      List.unmodifiable(_horizLines),
-            pendingIdx:      _pendingIdx,
-            pendingPrice:    _pendingPrice,
-            pendingScreen:   (_pendingIdx != null && _touchPos != null)
+            candles:           _candles,
+            candleWidth:       _candleWidth,
+            scrollCandles:     _scrollCandles,
+            rightPadCandles:   _rightPadCandles,
+            trendLines:        List.unmodifiable(_trendLines),
+            horizLines:        List.unmodifiable(_horizLines),
+            pendingIdx:        _pendingIdx,
+            pendingPrice:      _pendingPrice,
+            pendingScreen:     (_pendingIdx != null && _touchPos != null)
                 ? _touchPos : null,
-            selectedId:      _selId,
-            rangeLo:         priceRange.lo,
-            rangeHi:         priceRange.hi,
+            selectedId:        _selId,
+            rangeLo:           priceRange.lo,
+            rangeHi:           priceRange.hi,
             selectedCandleIdx: _selectedIdx,
-            crosshair:       _crosshair,
-            livePrice:       _livePrice,
-            drawTool:        _drawTool,
-            isMoving:        _isMoving,
+            crosshair:         _crosshair,
+            livePrice:         _livePrice,
+            drawTool:          _drawTool,
+            isMoving:          _isMoving,
           ),
           size: Size(constraints.maxWidth, constraints.maxHeight),
         );
@@ -1121,7 +1296,7 @@ class _ChartScreenState extends State<ChartScreen>
 
 // ── Hit result ────────────────────────────────────────────
 class _HitResult {
-  final String    type;   // 'h' or 't'
+  final String    type;
   final String    id;
   final _TlHandle handle;
   _HitResult(this.type, this.id, this.handle);
@@ -1156,7 +1331,7 @@ class _LineActionsSheet extends StatefulWidget {
 }
 
 class _LineActionsSheetState extends State<_LineActionsSheet> {
-  String _condition  = 'touch';
+  String _condition     = 'touch';
   String _selectedBotId = '';
 
   @override
@@ -1182,7 +1357,6 @@ class _LineActionsSheetState extends State<_LineActionsSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark     = Theme.of(context).brightness == Brightness.dark;
     final sheetColor = const Color(0xFF1A1A2E);
     final bots       = Config.bots;
     if (bots.isNotEmpty && !bots.any((b) => b.id == _selectedBotId)) {
@@ -1202,7 +1376,6 @@ class _LineActionsSheetState extends State<_LineActionsSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Handle
               Center(
                 child: Container(width: 36, height: 4,
                     decoration: BoxDecoration(
@@ -1231,7 +1404,7 @@ class _LineActionsSheetState extends State<_LineActionsSheet> {
                         fontWeight: FontWeight.bold)),
               ]),
               const SizedBox(height: 4),
-              Text('${widget.symbol}',
+              Text(widget.symbol,
                   style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
 
               const SizedBox(height: 16),
@@ -1244,33 +1417,22 @@ class _LineActionsSheetState extends State<_LineActionsSheet> {
                     size: 15,
                     color: widget.hasAlert ? Colors.orange : Colors.grey.shade500),
                 const SizedBox(width: 8),
-                Text(widget.hasAlert ? 'Alert active' : 'Set price alert',
-                    style: TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w600,
-                        color: widget.hasAlert ? Colors.orange : Colors.white)),
+                Text(
+                  widget.hasAlert ? 'Alert active' : 'Set price alert',
+                  style: TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600,
+                      color: widget.hasAlert ? Colors.orange : Colors.white)),
               ]),
+              const SizedBox(height: 4),
+              Text(
+                widget.hasAlert
+                    ? 'A Telegram alert fires when the live price hits this line.'
+                    : 'Sends a Telegram message when live price crosses this line.',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+              ),
               const SizedBox(height: 12),
 
               if (!widget.hasAlert) ...[
-                // Condition selector
-                const Text('Alert when price:',
-                    style: TextStyle(fontSize: 11, color: Color(0xFF888899))),
-                const SizedBox(height: 8),
-                Row(children: [
-                  _CondChip(label: '⬡ Touches', value: 'touch',
-                      selected: _condition == 'touch',
-                      onTap: () => setState(() => _condition = 'touch')),
-                  const SizedBox(width: 8),
-                  _CondChip(label: '▲ Crosses Above', value: 'above',
-                      selected: _condition == 'above',
-                      onTap: () => setState(() => _condition = 'above')),
-                  const SizedBox(width: 8),
-                  _CondChip(label: '▼ Crosses Below', value: 'below',
-                      selected: _condition == 'below',
-                      onTap: () => setState(() => _condition = 'below')),
-                ]),
-                const SizedBox(height: 14),
-
                 // Bot selector
                 if (bots.isEmpty)
                   Container(
@@ -1336,7 +1498,7 @@ class _LineActionsSheetState extends State<_LineActionsSheet> {
                         ? null
                         : () => widget.onSetAlert(_selectedBotId, _condition),
                     icon: const Icon(Icons.notifications_active_rounded, size: 16),
-                    label: const Text('Set Alert',
+                    label: const Text('Activate Alert',
                         style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blueAccent,
@@ -1360,8 +1522,9 @@ class _LineActionsSheetState extends State<_LineActionsSheet> {
                         size: 14, color: Colors.orange),
                     const SizedBox(width: 8),
                     const Expanded(
-                      child: Text('Alert is active for this line',
-                          style: TextStyle(fontSize: 12, color: Colors.orange)),
+                      child: Text(
+                        'Alert is active — fires when price hits this line',
+                        style: TextStyle(fontSize: 12, color: Colors.orange)),
                     ),
                     GestureDetector(
                       onTap: widget.onRemoveAlert,
@@ -1387,7 +1550,6 @@ class _LineActionsSheetState extends State<_LineActionsSheet> {
               const Divider(color: Color(0xFF2A2A40), height: 1),
               const SizedBox(height: 12),
 
-              // Delete line
               SizedBox(
                 width: double.infinity,
                 height: 42,
@@ -1407,37 +1569,6 @@ class _LineActionsSheetState extends State<_LineActionsSheet> {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-// ── Condition chip ────────────────────────────────────────
-class _CondChip extends StatelessWidget {
-  final String label, value;
-  final bool   selected;
-  final VoidCallback onTap;
-  const _CondChip({required this.label, required this.value,
-      required this.selected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 130),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          color: selected ? Colors.blueAccent.withOpacity(0.15) : const Color(0xFF12121E),
-          borderRadius: BorderRadius.circular(7),
-          border: Border.all(
-            color: selected ? Colors.blueAccent.withOpacity(0.6) : const Color(0xFF2A2A40),
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: Text(label, style: TextStyle(
-            fontSize: 10.5, fontWeight: FontWeight.w600,
-            color: selected ? Colors.blueAccent : Colors.grey.shade500)),
       ),
     );
   }
@@ -1733,15 +1864,17 @@ class _ChartPainter extends CustomPainter {
       _dashH(canvas, y, cW, sel ? Colors.white : hl.color,
           dash: 8, gap: 5, width: sel ? 1.8 : 1.1);
       if (sel) {
-        // Glow
         _dashH(canvas, y, cW, hl.color.withOpacity(0.3),
             dash: 8, gap: 5, width: 5);
-        // Center drag handle
         _drawHandle(canvas, Offset(cW / 2, y), hl.color, sel: true);
       }
       if (hl.hasAlert) {
-        canvas.drawCircle(Offset(12, y), 4,
+        // Orange bell badge indicating active alert
+        canvas.drawCircle(Offset(16, y), 5,
             Paint()..color = Colors.orange..style = PaintingStyle.fill);
+        canvas.drawCircle(Offset(16, y), 5,
+            Paint()..color = Colors.orange.withOpacity(0.3)
+              ..style = PaintingStyle.stroke..strokeWidth = 3);
       }
     }
     canvas.restore();
@@ -1757,16 +1890,17 @@ class _ChartPainter extends CustomPainter {
           sel ? Colors.white : tl.color,
           width: sel ? 1.8 : 1.3,
           glow: sel ? tl.color : null);
-      // Endpoint handles
       for (final pt in [Offset(x1, y1), Offset(x2, y2)]) {
         _drawHandle(canvas, pt, tl.color, sel: sel);
       }
       if (tl.hasAlert) {
-        // Alert dot on line midpoint
         final mx = (x1 + x2) / 2; final my = (y1 + y2) / 2;
         if (mx >= 0 && mx <= cW) {
           canvas.drawCircle(Offset(mx, my), 5,
               Paint()..color = Colors.orange..style = PaintingStyle.fill);
+          canvas.drawCircle(Offset(mx, my), 5,
+              Paint()..color = Colors.orange.withOpacity(0.3)
+                ..style = PaintingStyle.stroke..strokeWidth = 3);
         }
       }
     }
@@ -1869,7 +2003,8 @@ class _ChartPainter extends CustomPainter {
       final y = p2y(hl.price);
       if (y < -10 || y > cH + 10) continue;
       _drawTagBox(canvas, cW, y.clamp(4.0, cH - 14.0), hl.price,
-          hl.id == selectedId ? Colors.white : hl.color);
+          hl.id == selectedId ? Colors.white : hl.color,
+          hasAlert: hl.hasAlert);
     }
 
     // ── Time axis ─────────────────────────────────────
@@ -1893,7 +2028,6 @@ class _ChartPainter extends CustomPainter {
     }
   }
 
-  // ── Draw selected handle dot ──────────────────────────
   void _drawHandle(Canvas canvas, Offset pt, Color color, {bool sel = false}) {
     if (sel) {
       canvas.drawCircle(pt, 7,
@@ -1906,13 +2040,11 @@ class _ChartPainter extends CustomPainter {
           ..style = PaintingStyle.stroke..strokeWidth = 1);
   }
 
-  // ── Extended trend line ───────────────────────────────
   void _drawExtendedLine(Canvas canvas, double cW, double cH,
       double x1, double y1, double x2, double y2, Color color,
       {double width = 1.3, Color? glow}) {
     const far = 9999.0;
     if (glow != null) {
-      // Glow pass
       final gp = Paint()
         ..color = glow.withOpacity(0.25)
         ..strokeWidth = width + 4
@@ -1936,7 +2068,6 @@ class _ChartPainter extends CustomPainter {
     }
   }
 
-  // ── Helpers ───────────────────────────────────────────
   void _dashH(Canvas c, double y, double w, Color col,
       {double dash = 6, double gap = 4, double width = 1.0}) {
     final p = Paint()..color = col..strokeWidth = width;
@@ -1960,11 +2091,21 @@ class _ChartPainter extends CustomPainter {
     tp.paint(canvas, Offset(cW + 6, y - tp.height / 2));
   }
 
-  void _drawTagBox(Canvas canvas, double cW, double y, double price, Color color) {
+  void _drawTagBox(Canvas canvas, double cW, double y, double price,
+      Color color, {bool hasAlert = false}) {
     final tp   = _mkTP(_fmtP(price), color, 9.0, bold: true);
-    final rect = Rect.fromLTWH(cW + 2, y - tp.height / 2 - 2, tp.width + 8, tp.height + 4);
+    final bgW  = tp.width + (hasAlert ? 22 : 8);
+    final rect = Rect.fromLTWH(cW + 2, y - tp.height / 2 - 2, bgW, tp.height + 4);
     canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)),
         Paint()..color = color.withOpacity(0.2));
+    if (hasAlert) {
+      // Small bell icon indicator
+      canvas.drawCircle(
+        Offset(cW + 2 + bgW - 8, y),
+        3,
+        Paint()..color = Colors.orange..style = PaintingStyle.fill,
+      );
+    }
     tp.paint(canvas, Offset(cW + 6, y - tp.height / 2));
   }
 

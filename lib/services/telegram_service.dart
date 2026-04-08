@@ -1,6 +1,6 @@
 // ─── services/telegram_service.dart ─────────────────────
-// Sends HH/LL, manual price alerts, and candle pattern alerts
-// to Telegram. Each method routes to the correct bot(s).
+// Sends HH/LL, manual price alerts, candle pattern alerts,
+// and drawn-line hit alerts to Telegram.
 
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -125,9 +125,6 @@ class TelegramService {
 
   // ──────────────────────────────────────────────────────
   // ALERT TYPE 4: CANDLE PATTERN
-  // Called once per detected (pattern × timeframe) combo.
-  // [pattern]   — the specific code that fired: 'BE', 'MS', or 'ES'
-  // [timeframe] — the specific timeframe on which it fired
   // ──────────────────────────────────────────────────────
   static Future<bool> sendCandlePatternAlert({
     required TelegramBot        bot,
@@ -171,6 +168,37 @@ class TelegramService {
         '💰 <b>Price:</b>      <code>${livePrice.toStringAsFixed(5)}</code>\n'
         '🕐 <b>Signal bar:</b> $timeStr\n'
         '📌 <b>Signal:</b>     $directionNote\n';
+
+    return _sendToBot(bot, msg);
+  }
+
+  // ──────────────────────────────────────────────────────
+  // ALERT TYPE 5: DRAWN LINE HIT (chart screen real-time)
+  // Fires when live price crosses a Trend Line or H-Line
+  // that the user has marked with an alert on the chart.
+  // ──────────────────────────────────────────────────────
+  static Future<bool> sendDrawnLineHitAlert({
+    required TelegramBot bot,
+    required String      symbol,
+    required String      timeframe,
+    required String      lineType,      // 'Horizontal Line' | 'Trend Line'
+    required double      linePrice,
+    required double      currentPrice,
+  }) async {
+    if (!bot.isConfigured) return false;
+
+    final tfName = _tfNames[timeframe] ?? timeframe;
+    final dir    = currentPrice >= linePrice ? '↑' : '↓';
+    final emoji  = currentPrice >= linePrice ? '🚀' : '📉';
+
+    final msg =
+        '$emoji <b>Chart Line Hit!</b>\n\n'
+        '📊 <b>Symbol:</b>      $symbol\n'
+        '⏱ <b>Timeframe:</b>   $tfName\n'
+        '📏 <b>Line Type:</b>   $lineType\n'
+        '🎯 <b>Line Price:</b>  <code>${linePrice.toStringAsFixed(5)}</code>\n'
+        '💰 <b>Current:</b>     <code>${currentPrice.toStringAsFixed(5)}</code>\n'
+        '📌 <b>Signal:</b>      Price hit the drawn $lineType $dir\n';
 
     return _sendToBot(bot, msg);
   }
