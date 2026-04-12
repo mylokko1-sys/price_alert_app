@@ -2,10 +2,13 @@
 // Root widget:
 //   • 5-tab BottomNavigationBar → Home | Pairs | Indicator | Bot | Chart
 //   • Left hamburger drawer → Price Alerts · Candle Pattern Alerts
+//                             · Chart Line Alerts (from chart drawings)
 //   • Right AppBar icon → Telegram Bots sheet
 
 import 'package:flutter/material.dart';
 import '../config.dart';
+import '../models/chart_models.dart';
+import '../services/chart_drawings_storage.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
 import 'price_alerts_screen.dart';
@@ -85,6 +88,14 @@ class _MainShellState extends State<MainShell> {
     ).then((_) => setState(() {}));
   }
 
+  void _openChartLineAlerts() {
+    Navigator.pop(context);
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ChartLineAlertsScreen()),
+    ).then((_) => setState(() {}));
+  }
+
   // ══════════════════════════════════════════════════════
   // BUILD
   // ══════════════════════════════════════════════════════
@@ -94,17 +105,15 @@ class _MainShellState extends State<MainShell> {
     final isDark      = Theme.of(context).brightness == Brightness.dark;
     final isChartTab  = _index == 4;
 
-    // Pages — ChartScreen kept alive via AutomaticKeepAliveClientMixin
     final pages = [
       const HomeBody(),
       TradingPairsSettingsPage(onSaved: _onSaved),
       IndicatorSettingsPage(onSaved: _onSaved),
       BotSettingsPage(onSaved: _onSaved),
-      const ChartScreen(),   // ← tab 4
+      const ChartScreen(),
     ];
 
     return Scaffold(
-      // Chart tab owns its own AppBar → hide shell AppBar for tab 4
       appBar: isChartTab
           ? null
           : AppBar(
@@ -119,17 +128,16 @@ class _MainShellState extends State<MainShell> {
               ],
             ),
 
-      // Drawer only visible when not on chart tab
       drawer: isChartTab
           ? null
           : _AppDrawer(
               onPriceAlerts:         _openPriceAlerts,
               onCandlePatternAlerts: _openCandlePatternAlerts,
+              onChartLineAlerts:     _openChartLineAlerts,
             ),
 
       body: IndexedStack(index: _index, children: pages),
 
-      // ── Bottom nav ─────────────────────────────────────
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
         onTap: (i) => setState(() => _index = i),
@@ -139,7 +147,7 @@ class _MainShellState extends State<MainShell> {
             isDark ? Colors.grey.shade600 : Colors.grey.shade500,
         backgroundColor:
             isChartTab
-                ? const Color(0xFF0D0D1A)   // dark bg for chart tab
+                ? const Color(0xFF0D0D1A)
                 : (isDark ? const Color(0xFF1E1E2E) : Colors.white),
         selectedFontSize:   10,
         unselectedFontSize: 10,
@@ -164,14 +172,46 @@ class _TabItem {
 // ══════════════════════════════════════════════════════════
 // DRAWER
 // ══════════════════════════════════════════════════════════
-class _AppDrawer extends StatelessWidget {
+class _AppDrawer extends StatefulWidget {
   final VoidCallback onPriceAlerts;
   final VoidCallback onCandlePatternAlerts;
+  final VoidCallback onChartLineAlerts;
 
   const _AppDrawer({
     required this.onPriceAlerts,
     required this.onCandlePatternAlerts,
+    required this.onChartLineAlerts,
   });
+
+  @override
+  State<_AppDrawer> createState() => _AppDrawerState();
+}
+
+class _AppDrawerState extends State<_AppDrawer> {
+  // Chart line alert counts loaded from storage
+  int _chartLineAlertCount = 0;
+  bool _loadingChartAlerts = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadChartLineAlertCount();
+  }
+
+  Future<void> _loadChartLineAlertCount() async {
+    setState(() => _loadingChartAlerts = true);
+    try {
+      final all = await ChartDrawingsStorage.loadAllWithAlerts();
+      int count = 0;
+      for (final bundle in all.values) {
+        count += bundle.trendLines.where((t) => t.hasAlert).length;
+        count += bundle.horizLines.where((h) => h.hasAlert).length;
+      }
+      if (mounted) setState(() { _chartLineAlertCount = count; _loadingChartAlerts = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loadingChartAlerts = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -187,7 +227,7 @@ class _AppDrawer extends StatelessWidget {
       backgroundColor: drawerBg,
       child: Column(
         children: [
-          // Header
+          // ── Header ──────────────────────────────────────
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(20, 56, 20, 24),
@@ -202,31 +242,27 @@ class _AppDrawer extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   alignment: Alignment.center,
-                  child: const Text('📈',
-                      style: TextStyle(fontSize: 24)),
+                  child: const Text('📈', style: TextStyle(fontSize: 24)),
                 ),
                 const SizedBox(height: 12),
                 const Text('HH/LL Alert Bot',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
+                    style: TextStyle(color: Colors.white, fontSize: 18,
                         fontWeight: FontWeight.bold)),
                 const SizedBox(height: 2),
                 Text('Crypto trading alerts',
                     style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
-                        fontSize: 12.5)),
+                        color: Colors.white.withOpacity(0.7), fontSize: 12.5)),
               ],
             ),
           ),
 
-          // Nav items
+          // ── Nav items ───────────────────────────────────
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 8),
               children: [
 
-                // Price Alerts
+                // ── Price Alerts ──────────────────────────
                 _DrawerItem(
                   icon:       Icons.notifications_rounded,
                   label:      'Price Alerts',
@@ -236,13 +272,12 @@ class _AppDrawer extends StatelessWidget {
                       ? '$triggered triggered'
                       : 'Set custom price targets',
                   subColor:   triggered > 0 ? Colors.orange : null,
-                  onTap:      onPriceAlerts,
+                  onTap:      widget.onPriceAlerts,
                 ),
 
-                Divider(height: 1, indent: 16, endIndent: 16,
-                    color: divColor),
+                Divider(height: 1, indent: 16, endIndent: 16, color: divColor),
 
-                // Candle Pattern Alerts
+                // ── Candle Pattern Alerts ─────────────────
                 _DrawerItem(
                   icon:       Icons.bar_chart_rounded,
                   label:      'Candle Patterns',
@@ -250,31 +285,47 @@ class _AppDrawer extends StatelessWidget {
                   badgeColor: Colors.teal,
                   sub:        'BE · MS · ES detection',
                   subColor:   null,
-                  onTap:      onCandlePatternAlerts,
+                  onTap:      widget.onCandlePatternAlerts,
                 ),
 
-                Divider(height: 1, indent: 16, endIndent: 16,
-                    color: divColor),
+                Divider(height: 1, indent: 16, endIndent: 16, color: divColor),
+
+                // ── Chart Line Alerts ─────────────────────
+                _DrawerItem(
+                  icon:       Icons.show_chart_rounded,
+                  label:      'Chart Line Alerts',
+                  badge:      _loadingChartAlerts
+                      ? null
+                      : _chartLineAlertCount > 0
+                          ? '$_chartLineAlertCount active'
+                          : null,
+                  badgeColor: Colors.orange,
+                  badgeLoading: _loadingChartAlerts,
+                  sub:        _chartLineAlertCount > 0
+                      ? '$_chartLineAlertCount trend/H-line alerts set'
+                      : 'Trend & horizontal line alerts',
+                  subColor:   _chartLineAlertCount > 0 ? Colors.orange : null,
+                  onTap:      widget.onChartLineAlerts,
+                ),
+
+                Divider(height: 1, indent: 16, endIndent: 16, color: divColor),
 
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                   child: Text('More features coming soon',
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade500,
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade500,
                           letterSpacing: 0.5)),
                 ),
               ],
             ),
           ),
 
-          // Footer
+          // ── Footer ──────────────────────────────────────
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Text('HH/LL Alert Bot  •  v1.0',
-                  style: TextStyle(
-                      fontSize: 11, color: Colors.grey.shade500)),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
             ),
           ),
         ],
@@ -289,6 +340,7 @@ class _DrawerItem extends StatelessWidget {
   final String       label;
   final String?      badge;
   final Color?       badgeColor;
+  final bool         badgeLoading;
   final String?      sub;
   final Color?       subColor;
   final VoidCallback onTap;
@@ -299,6 +351,7 @@ class _DrawerItem extends StatelessWidget {
     required this.onTap,
     this.badge,
     this.badgeColor,
+    this.badgeLoading = false,
     this.sub,
     this.subColor,
   });
@@ -319,30 +372,28 @@ class _DrawerItem extends StatelessWidget {
       ),
       title: Row(children: [
         Text(label,
-            style: const TextStyle(
-                fontWeight: FontWeight.w600, fontSize: 14.5)),
-        if (badge != null) ...[
-          const SizedBox(width: 8),
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5)),
+        const SizedBox(width: 8),
+        if (badgeLoading)
+          SizedBox(width: 12, height: 12,
+              child: CircularProgressIndicator(strokeWidth: 1.5,
+                  color: Colors.grey.shade500))
+        else if (badge != null)
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
             decoration: BoxDecoration(
-              color:
-                  (badgeColor ?? Colors.blueAccent).withOpacity(0.15),
+              color: (badgeColor ?? Colors.blueAccent).withOpacity(0.15),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(badge!,
-                style: TextStyle(
-                    fontSize: 10,
+                style: TextStyle(fontSize: 10,
                     color: badgeColor ?? Colors.blueAccent,
                     fontWeight: FontWeight.w600)),
           ),
-        ],
       ]),
       subtitle: sub != null
           ? Text(sub!,
-              style: TextStyle(
-                  fontSize: 11.5,
+              style: TextStyle(fontSize: 11.5,
                   color: subColor ?? Colors.grey.shade500))
           : null,
       trailing: Icon(Icons.chevron_right_rounded,
@@ -350,6 +401,323 @@ class _DrawerItem extends StatelessWidget {
           size: 20),
     );
   }
+}
+
+// ══════════════════════════════════════════════════════════
+// CHART LINE ALERTS SCREEN
+// Full-screen list of all active line alerts across all symbols.
+// ══════════════════════════════════════════════════════════
+class ChartLineAlertsScreen extends StatefulWidget {
+  const ChartLineAlertsScreen({super.key});
+
+  @override
+  State<ChartLineAlertsScreen> createState() => _ChartLineAlertsScreenState();
+}
+
+class _ChartLineAlertsScreenState extends State<ChartLineAlertsScreen> {
+  bool                         _loading = true;
+  Map<String, DrawingsBundle>  _data    = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final data = await ChartDrawingsStorage.loadAllWithAlerts();
+    if (mounted) setState(() { _data = data; _loading = false; });
+  }
+
+  // ── Deactivate a specific line alert from storage ──────
+  Future<void> _removeAlert(String symbol, String id, String type) async {
+    // Load the full bundle for this symbol
+    final bundle = await ChartDrawingsStorage.load(symbol);
+    List<TrendLineData> tls = bundle.trendLines;
+    List<HorizLineData> hls = bundle.horizLines;
+
+    if (type == 't') {
+      tls = tls.map((t) => t.id == id ? t.copyWith(hasAlert: false, botId: '') : t).toList();
+    } else {
+      hls = hls.map((h) => h.id == id ? h.copyWith(hasAlert: false, botId: '') : h).toList();
+    }
+
+    await ChartDrawingsStorage.save(symbol: symbol, trendLines: tls, horizLines: hls);
+    await _load(); // refresh list
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Row(children: [
+          Icon(Icons.check_circle, color: Colors.white, size: 16),
+          SizedBox(width: 8),
+          Text('Alert removed'),
+        ]),
+        backgroundColor: Colors.green.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(12),
+        duration: const Duration(seconds: 2),
+      ));
+    }
+  }
+
+  String _fmtP(double v) {
+    if (v >= 10000) return v.toStringAsFixed(0);
+    if (v >= 100)   return v.toStringAsFixed(2);
+    if (v >= 1)     return v.toStringAsFixed(4);
+    return v.toStringAsFixed(6);
+  }
+
+  String _botName(String botId) {
+    try { return Config.bots.firstWhere((b) => b.id == botId).name; }
+    catch (_) { return 'Unknown Bot'; }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Flatten: collect all active alerts across all symbols, sorted
+    final entries = <_AlertEntry>[];
+    for (final sym in _data.keys.toList()..sort()) {
+      final bundle = _data[sym]!;
+      for (final tl in bundle.trendLines.where((t) => t.hasAlert)) {
+        entries.add(_AlertEntry(
+          symbol: sym, id: tl.id, type: 't',
+          label:  'Trend Line',
+          price:  tl.price2,          // use endpoint price
+          botId:  tl.botId,
+          color:  tl.color,
+        ));
+      }
+      for (final hl in bundle.horizLines.where((h) => h.hasAlert)) {
+        entries.add(_AlertEntry(
+          symbol: sym, id: hl.id, type: 'h',
+          label:  'Horizontal Line',
+          price:  hl.price,
+          botId:  hl.botId,
+          color:  hl.color,
+        ));
+      }
+    }
+
+    return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF12121E) : const Color(0xFFF5F5F5),
+      appBar: AppBar(
+        title: const Text('Chart Line Alerts'),
+        centerTitle: false,
+        backgroundColor: isDark ? const Color(0xFF1E1E2E) : Colors.white,
+        foregroundColor: isDark ? Colors.white : Colors.black,
+        elevation: 0,
+        actions: [
+          if (entries.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                  ),
+                  child: Text('${entries.length} active',
+                      style: const TextStyle(fontSize: 11, color: Colors.orange,
+                          fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ),
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _load,
+            tooltip: 'Refresh',
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator(color: Colors.orange))
+          : entries.isEmpty
+              ? _buildEmpty()
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  color: Colors.orange,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                    itemCount: entries.length,
+                    itemBuilder: (_, i) => _buildCard(entries[i], isDark),
+                  ),
+                ),
+    );
+  }
+
+  Widget _buildEmpty() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.notifications_none_rounded,
+              size: 64, color: Colors.grey.shade400),
+          const SizedBox(height: 16),
+          const Text('No chart line alerts active',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text(
+            'Open the Chart tab, draw a Trend Line\nor H-Line, then tap it to set an alert.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCard(_AlertEntry entry, bool isDark) {
+    final isH    = entry.type == 'h';
+    final cardBg = isDark ? const Color(0xFF1E1E2E) : Colors.white;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border(left: BorderSide(color: Colors.orange, width: 4)),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05),
+              blurRadius: 6, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        child: Row(children: [
+
+          // ── Line type icon ─────────────────────────────
+          Container(
+            width: 40, height: 40,
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              isH ? Icons.horizontal_rule_rounded : Icons.show_chart_rounded,
+              color: Colors.orange, size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // ── Info ──────────────────────────────────────
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              // Symbol badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.blueAccent.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(entry.symbol,
+                    style: const TextStyle(fontSize: 11, color: Colors.blueAccent,
+                        fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 8),
+              Text(entry.label,
+                  style: const TextStyle(fontSize: 13,
+                      fontWeight: FontWeight.bold)),
+            ]),
+            const SizedBox(height: 5),
+            Row(children: [
+              Icon(Icons.price_change_rounded, size: 13,
+                  color: Colors.grey.shade500),
+              const SizedBox(width: 4),
+              Text('Price: ${_fmtP(entry.price)}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500,
+                      fontWeight: FontWeight.w500)),
+            ]),
+            const SizedBox(height: 3),
+            Row(children: [
+              Icon(Icons.smart_toy_rounded, size: 12,
+                  color: Colors.grey.shade500),
+              const SizedBox(width: 4),
+              Text(
+                entry.botId.isNotEmpty ? _botName(entry.botId) : 'No bot assigned',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text('🔔 Watching',
+                    style: TextStyle(fontSize: 10, color: Colors.orange,
+                        fontWeight: FontWeight.w600)),
+              ),
+            ]),
+          ])),
+
+          // ── Remove button ─────────────────────────────
+          GestureDetector(
+            onTap: () => _confirmRemove(entry),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.withOpacity(0.3)),
+              ),
+              child: const Text('Remove',
+                  style: TextStyle(fontSize: 12, color: Colors.redAccent,
+                      fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _confirmRemove(_AlertEntry entry) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Remove Alert'),
+        content: Text(
+          'Remove the ${entry.label} alert on ${entry.symbol}?\n'
+          'The line will remain on the chart.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove',
+                style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await _removeAlert(entry.symbol, entry.id, entry.type);
+    }
+  }
+}
+
+// ── Data model for the list ───────────────────────────────
+class _AlertEntry {
+  final String symbol;
+  final String id;
+  final String type;   // 'h' | 't'
+  final String label;
+  final double price;
+  final String botId;
+  final Color  color;
+  const _AlertEntry({
+    required this.symbol, required this.id,    required this.type,
+    required this.label,  required this.price, required this.botId,
+    required this.color,
+  });
 }
 
 // ══════════════════════════════════════════════════════════
@@ -380,9 +748,7 @@ class _TelegramBotsSheet extends StatelessWidget {
             Container(
               width: 40, height: 4,
               decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.grey.shade700
-                    : Colors.grey.shade300,
+                color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
