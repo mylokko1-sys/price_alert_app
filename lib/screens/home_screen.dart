@@ -100,15 +100,18 @@ class _HomeBodyState extends State<HomeBody> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Row(children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 18),
-            SizedBox(width: 8),
-            Text('All alerted levels cleared'),
-          ]),
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white, size: 18),
+              SizedBox(width: 8),
+              Text('All alerted levels cleared'),
+            ],
+          ),
           backgroundColor: Colors.green.shade700,
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           margin: const EdgeInsets.all(12),
           duration: const Duration(seconds: 2),
         ),
@@ -124,10 +127,12 @@ class _HomeBodyState extends State<HomeBody> {
     final accentColor = _isRunning ? Colors.greenAccent : Colors.redAccent;
 
     // Summarize active bots
-    final hitBots =
-        Config.bots.where((b) => b.alertOnHit && b.isConfigured).length;
-    final newBots =
-        Config.bots.where((b) => b.alertOnNew && b.isConfigured).length;
+    final hitBots = Config.bots
+        .where((b) => b.alertOnHit && b.isConfigured)
+        .length;
+    final newBots = Config.bots
+        .where((b) => b.alertOnNew && b.isConfigured)
+        .length;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -211,12 +216,13 @@ class _HomeBodyState extends State<HomeBody> {
                 child: ElevatedButton.icon(
                   onPressed: _toggleBot,
                   icon: Icon(_isRunning ? Icons.stop : Icons.play_arrow),
-                  label: Text(_isRunning ? 'Stop Bot' : 'Start Bot'),
+                  label: Text(_isRunning ? 'Stop Services' : 'Start Services'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: accentColor,
                     foregroundColor: Colors.black,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
               ),
@@ -240,8 +246,9 @@ class _HomeBodyState extends State<HomeBody> {
                 children: Config.symbols.map((s) {
                   return Chip(
                     label: Text(s, style: const TextStyle(fontSize: 12)),
-                    backgroundColor:
-                        isDark ? const Color(0xFF2A2A3E) : Colors.blue.shade50,
+                    backgroundColor: isDark
+                        ? const Color(0xFF2A2A3E)
+                        : Colors.blue.shade50,
                     side: BorderSide(
                       color: isDark
                           ? Colors.blueAccent.withOpacity(0.3)
@@ -269,8 +276,10 @@ class _HomeBodyState extends State<HomeBody> {
                   TextButton.icon(
                     onPressed: _clearAlertedLevels,
                     icon: const Icon(Icons.delete_outline, size: 15),
-                    label: const Text('Clear Levels',
-                        style: TextStyle(fontSize: 12)),
+                    label: const Text(
+                      'Clear Levels',
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ),
                 ],
               ),
@@ -281,11 +290,13 @@ class _HomeBodyState extends State<HomeBody> {
                     padding: const EdgeInsets.symmetric(vertical: 24),
                     child: Column(
                       children: [
-                        Icon(Icons.notifications_none_rounded,
-                            size: 40,
-                            color: isDark
-                                ? Colors.grey.shade700
-                                : Colors.grey.shade400),
+                        Icon(
+                          Icons.notifications_none_rounded,
+                          size: 40,
+                          color: isDark
+                              ? Colors.grey.shade700
+                              : Colors.grey.shade400,
+                        ),
                         const SizedBox(height: 8),
                         Text(
                           'No alerts yet.\nStart the bot to begin watching.',
@@ -344,9 +355,13 @@ class _HomeBodyState extends State<HomeBody> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 13)),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
               Text(subtitle, style: TextStyle(color: color, fontSize: 12)),
             ],
           ),
@@ -394,8 +409,11 @@ class _BadgeChip extends StatelessWidget {
   final String label;
   final Color color;
   final bool isDark;
-  const _BadgeChip(
-      {required this.label, required this.color, required this.isDark});
+  const _BadgeChip({
+    required this.label,
+    required this.color,
+    required this.isDark,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -408,8 +426,11 @@ class _BadgeChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style:
-            TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          fontSize: 10,
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
