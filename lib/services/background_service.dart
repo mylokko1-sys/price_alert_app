@@ -38,8 +38,7 @@ Future<void> initBackgroundService() async {
       FlutterLocalNotificationsPlugin();
   await plugin
       .resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin
-      >()
+          AndroidFlutterLocalNotificationsPlugin>()
       ?.createNotificationChannel(channel);
 
   await service.configure(
@@ -186,8 +185,7 @@ Future<void> _runAllChecks(ServiceInstance service) async {
     await prefs.reload();
     final timeframes = Config.effectiveTimeframes;
     final now = DateTime.now();
-    final timeStr =
-        '${now.hour.toString().padLeft(2, '0')}:'
+    final timeStr = '${now.hour.toString().padLeft(2, '0')}:'
         '${now.minute.toString().padLeft(2, '0')}';
 
     if (service is AndroidServiceInstance) {
@@ -244,8 +242,7 @@ Future<void> _checkHHLL(
       final key =
           '${type}_HIT_${symbol}_${timeframe}_${level.toStringAsFixed(5)}';
       if (prefs.getBool(key) ?? false) return;
-      final isHit =
-          PivotService.isHit(lastClosed, level, isHH) ||
+      final isHit = PivotService.isHit(lastClosed, level, isHH) ||
           PivotService.isHit(liveCandle, level, isHH);
       if (!isHit) return;
       final ok = await TelegramService.sendHitAlert(
@@ -397,9 +394,8 @@ Future<void> _checkCandlePatternAlerts(
   SharedPreferences prefs,
   ServiceInstance service,
 ) async {
-  final active = Config.candlePatternAlerts
-      .where((a) => a.shouldCheck)
-      .toList();
+  final active =
+      Config.candlePatternAlerts.where((a) => a.shouldCheck).toList();
   if (active.isEmpty) return;
 
   // ── 1. Collect all unique (symbol, timeframe) combos needed ──
@@ -642,26 +638,26 @@ Future<void> _checkTrendlineTouch(
         '🚀 TRENDLINE HIT: $symbol @ ${expectedPrice.toStringAsFixed(5)} '
         '(current: ${currentPrice.toStringAsFixed(5)})',
       );
-
-      // Remove the alert from storage after successful send
-      try {
-        final bundle = await ChartDrawingsStorage.load(symbol);
-        final updatedTls = bundle.trendLines
-            .map(
-              (t) => t.id == tl.id ? t.copyWith(hasAlert: false, botId: '') : t,
-            )
-            .toList();
-        await ChartDrawingsStorage.save(
-          symbol: symbol,
-          trendLines: updatedTls,
-          horizLines: bundle.horizLines,
-        );
-        print('✅ Trendline alert removed from list after firing');
-      } catch (e) {
-        print('⚠️ Could not remove trendline alert from storage: $e');
-      }
     } else {
       print('❌ Trendline alert send failed for $symbol');
+    }
+
+    // Remove the alert from storage (always execute)
+    try {
+      final bundle = await ChartDrawingsStorage.load(symbol);
+      final updatedTls = bundle.trendLines
+          .map(
+            (t) => t.id == tl.id ? t.copyWith(hasAlert: false, botId: '') : t,
+          )
+          .toList();
+      await ChartDrawingsStorage.save(
+        symbol: symbol,
+        trendLines: updatedTls,
+        horizLines: bundle.horizLines,
+      );
+      print('✅ Trendline alert removed from list after firing');
+    } catch (e) {
+      print('⚠️ Could not remove trendline alert from storage: $e');
     }
   } catch (e) {
     print('❌ Error checking trendline touch: $e');
@@ -738,26 +734,26 @@ Future<void> _checkHorizontalTouch(
         '🚀 HLINE HIT: $symbol @ ${hl.price.toStringAsFixed(5)} '
         '(current: ${currentPrice.toStringAsFixed(5)})',
       );
-
-      // Remove the alert from storage after successful send
-      try {
-        final bundle = await ChartDrawingsStorage.load(symbol);
-        final updatedHls = bundle.horizLines
-            .map(
-              (h) => h.id == hl.id ? h.copyWith(hasAlert: false, botId: '') : h,
-            )
-            .toList();
-        await ChartDrawingsStorage.save(
-          symbol: symbol,
-          trendLines: bundle.trendLines,
-          horizLines: updatedHls,
-        );
-        print('✅ Horizontal line alert removed from list after firing');
-      } catch (e) {
-        print('⚠️ Could not remove horizontal line alert from storage: $e');
-      }
     } else {
       print('❌ Horizontal line alert send failed for $symbol');
+    }
+
+    // Remove the alert from storage (always execute)
+    try {
+      final bundle = await ChartDrawingsStorage.load(symbol);
+      final updatedHls = bundle.horizLines
+          .map(
+            (h) => h.id == hl.id ? h.copyWith(hasAlert: false, botId: '') : h,
+          )
+          .toList();
+      await ChartDrawingsStorage.save(
+        symbol: symbol,
+        trendLines: bundle.trendLines,
+        horizLines: updatedHls,
+      );
+      print('✅ Horizontal line alert removed from list after firing');
+    } catch (e) {
+      print('⚠️ Could not remove horizontal line alert from storage: $e');
     }
   } catch (e) {
     print('❌ Error checking horizontal line touch: $e');
