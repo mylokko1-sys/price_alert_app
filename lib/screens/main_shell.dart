@@ -221,7 +221,7 @@ class _AppDrawerState extends State<_AppDrawer> {
   Future<void> _loadAllChartDrawings() async {
     setState(() => _loadingAllDrawings = true);
     try {
-      final all = await ChartDrawingsStorage.loadAllWithAlerts();
+      final all = await ChartDrawingsStorage.loadAll();
       if (mounted)
         setState(() {
           _allChartDrawings = all;
