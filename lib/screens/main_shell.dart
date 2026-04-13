@@ -5,6 +5,7 @@
 //                             · Chart Line Alerts (from chart drawings)
 //   • Right AppBar icon → Telegram Bots sheet
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../config.dart';
 import '../models/chart_models.dart';
@@ -660,15 +661,25 @@ class ChartLineAlertsScreen extends StatefulWidget {
 class _ChartLineAlertsScreenState extends State<ChartLineAlertsScreen> {
   bool _loading = true;
   Map<String, DrawingsBundle> _data = {};
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    // Auto-refresh every 3 seconds to catch deactivations from background service
+    _refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (mounted) _load();
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
     final data = await ChartDrawingsStorage.loadAllWithAlerts();
     if (mounted)
       setState(() {
