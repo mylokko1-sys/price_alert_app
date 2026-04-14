@@ -25,6 +25,7 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _index = 0;
+  final _chartKey = GlobalKey<State<ChartScreen>>();
 
   // ── Tab definitions ───────────────────────────────────
   static const _tabs = [
@@ -94,8 +95,19 @@ class _MainShellState extends State<MainShell> {
     Navigator.pop(context);
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ChartLineAlertsScreen()),
+      MaterialPageRoute(
+        builder: (_) => ChartLineAlertsScreen(
+          onSelectPair: _openChartWithSymbol,
+        ),
+      ),
     ).then((_) => setState(() {}));
+  }
+
+  // ── Navigate to chart with specific symbol ──────────────
+  void _openChartWithSymbol(String symbol) {
+    (_chartKey.currentState as dynamic)?.loadSymbol(symbol);
+    setState(() => _index = 4); // Switch to chart tab
+    Navigator.popUntil(context, (route) => route.isFirst);
   }
 
   // ══════════════════════════════════════════════════════
@@ -112,7 +124,7 @@ class _MainShellState extends State<MainShell> {
       TradingPairsSettingsPage(onSaved: _onSaved),
       IndicatorSettingsPage(onSaved: _onSaved),
       BotSettingsPage(onSaved: _onSaved),
-      const ChartScreen(),
+      ChartScreen(key: _chartKey),
     ];
 
     return Scaffold(
@@ -135,6 +147,7 @@ class _MainShellState extends State<MainShell> {
               onPriceAlerts: _openPriceAlerts,
               onCandlePatternAlerts: _openCandlePatternAlerts,
               onChartLineAlerts: _openChartLineAlerts,
+              onSelectPair: _openChartWithSymbol,
             ),
       body: IndexedStack(index: _index, children: pages),
       bottomNavigationBar: BottomNavigationBar(
@@ -142,9 +155,8 @@ class _MainShellState extends State<MainShell> {
         onTap: (i) => setState(() => _index = i),
         type: BottomNavigationBarType.fixed,
         selectedItemColor: Colors.blueAccent,
-        unselectedItemColor: isDark
-            ? Colors.grey.shade600
-            : Colors.grey.shade500,
+        unselectedItemColor:
+            isDark ? Colors.grey.shade600 : Colors.grey.shade500,
         backgroundColor: isChartTab
             ? const Color(0xFF0D0D1A)
             : (isDark ? const Color(0xFF1E1E2E) : Colors.white),
@@ -175,11 +187,13 @@ class _AppDrawer extends StatefulWidget {
   final VoidCallback onPriceAlerts;
   final VoidCallback onCandlePatternAlerts;
   final VoidCallback onChartLineAlerts;
+  final Function(String symbol)? onSelectPair;
 
   const _AppDrawer({
     required this.onPriceAlerts,
     required this.onCandlePatternAlerts,
     required this.onChartLineAlerts,
+    this.onSelectPair,
   });
 
   @override
@@ -314,91 +328,96 @@ class _AppDrawerState extends State<_AppDrawer> {
                         final hlineCount = bundle.horizLines.length;
                         final total = trendCount + hlineCount;
 
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? const Color(0xFF2A2A3E)
-                                : Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
+                        return GestureDetector(
+                          onTap: widget.onSelectPair != null
+                              ? () => widget.onSelectPair!(symbol)
+                              : null,
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
                               color: isDark
-                                  ? Colors.grey.shade800
-                                  : Colors.grey.shade200,
+                                  ? const Color(0xFF2A2A3E)
+                                  : Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.grey.shade800
+                                    : Colors.grey.shade200,
+                              ),
                             ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    symbol,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.blueAccent,
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.teal.withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: Colors.teal.withOpacity(0.3),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      '$total line${total != 1 ? 's' : ''}',
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      symbol,
                                       style: const TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.teal,
-                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blueAccent,
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.show_chart_rounded,
-                                    size: 14,
-                                    color: Colors.grey.shade500,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Trend: $trendCount',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade600,
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.teal.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: Colors.teal.withOpacity(0.3),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '$total line${total != 1 ? 's' : ''}',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.teal,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Icon(
-                                    Icons.horizontal_rule_rounded,
-                                    size: 14,
-                                    color: Colors.grey.shade500,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'H-Line: $hlineCount',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade600,
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.show_chart_rounded,
+                                      size: 14,
+                                      color: Colors.grey.shade500,
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Trend: $trendCount',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Icon(
+                                      Icons.horizontal_rule_rounded,
+                                      size: 14,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'H-Line: $hlineCount',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         );
                       },
@@ -503,8 +522,8 @@ class _AppDrawerState extends State<_AppDrawer> {
                   badge: _loadingChartAlerts
                       ? null
                       : _chartLineAlertCount > 0
-                      ? '$_chartLineAlertCount active'
-                      : null,
+                          ? '$_chartLineAlertCount active'
+                          : null,
                   badgeColor: Colors.orange,
                   badgeLoading: _loadingChartAlerts,
                   sub: _chartLineAlertCount > 0
@@ -523,8 +542,8 @@ class _AppDrawerState extends State<_AppDrawer> {
                   badge: _loadingAllDrawings
                       ? null
                       : _allChartDrawings.isNotEmpty
-                      ? '${_allChartDrawings.length} pairs'
-                      : null,
+                          ? '${_allChartDrawings.length} pairs'
+                          : null,
                   badgeColor: Colors.teal,
                   badgeLoading: _loadingAllDrawings,
                   sub: _getAllDrawingsCount() > 0
@@ -652,7 +671,9 @@ class _DrawerItem extends StatelessWidget {
 // Full-screen list of all active line alerts across all symbols.
 // ══════════════════════════════════════════════════════════
 class ChartLineAlertsScreen extends StatefulWidget {
-  const ChartLineAlertsScreen({super.key});
+  final Function(String symbol)? onSelectPair;
+
+  const ChartLineAlertsScreen({super.key, this.onSelectPair});
 
   @override
   State<ChartLineAlertsScreen> createState() => _ChartLineAlertsScreenState();
@@ -786,9 +807,8 @@ class _ChartLineAlertsScreenState extends State<ChartLineAlertsScreen> {
     }
 
     return Scaffold(
-      backgroundColor: isDark
-          ? const Color(0xFF12121E)
-          : const Color(0xFFF5F5F5),
+      backgroundColor:
+          isDark ? const Color(0xFF12121E) : const Color(0xFFF5F5F5),
       appBar: AppBar(
         title: const Text('Chart Line Alerts'),
         centerTitle: false,
@@ -831,16 +851,16 @@ class _ChartLineAlertsScreenState extends State<ChartLineAlertsScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: Colors.orange))
           : entries.isEmpty
-          ? _buildEmpty()
-          : RefreshIndicator(
-              onRefresh: _load,
-              color: Colors.orange,
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                itemCount: entries.length,
-                itemBuilder: (_, i) => _buildCard(entries[i], isDark),
-              ),
-            ),
+              ? _buildEmpty()
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  color: Colors.orange,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                    itemCount: entries.length,
+                    itemBuilder: (_, i) => _buildCard(entries[i], isDark),
+                  ),
+                ),
     );
   }
 
@@ -874,162 +894,169 @@ class _ChartLineAlertsScreenState extends State<ChartLineAlertsScreen> {
     final isH = entry.type == 'h';
     final cardBg = isDark ? const Color(0xFF1E1E2E) : Colors.white;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border(left: BorderSide(color: Colors.orange, width: 4)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-        child: Row(
-          children: [
-            // ── Line type icon ─────────────────────────────
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                isH ? Icons.horizontal_rule_rounded : Icons.show_chart_rounded,
-                color: Colors.orange,
-                size: 20,
-              ),
+    return GestureDetector(
+      onTap: widget.onSelectPair != null
+          ? () => widget.onSelectPair!(entry.symbol)
+          : null,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border(left: BorderSide(color: Colors.orange, width: 4)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
             ),
-            const SizedBox(width: 12),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          child: Row(
+            children: [
+              // ── Line type icon ─────────────────────────────
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  isH
+                      ? Icons.horizontal_rule_rounded
+                      : Icons.show_chart_rounded,
+                  color: Colors.orange,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
 
-            // ── Info ──────────────────────────────────────
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      // Symbol badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
+              // ── Info ──────────────────────────────────────
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        // Symbol badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blueAccent.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            entry.symbol,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.blueAccent,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
-                        decoration: BoxDecoration(
-                          color: Colors.blueAccent.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          entry.symbol,
+                        const SizedBox(width: 8),
+                        Text(
+                          entry.label,
                           style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.blueAccent,
+                            fontSize: 13,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        entry.label,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 5),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.price_change_rounded,
-                        size: 13,
-                        color: Colors.grey.shade500,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Price: ${_fmtP(entry.price)}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade500,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.smart_toy_rounded,
-                        size: 12,
-                        color: Colors.grey.shade500,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        entry.botId.isNotEmpty
-                            ? _botName(entry.botId)
-                            : 'No bot assigned',
-                        style: TextStyle(
-                          fontSize: 11,
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.price_change_rounded,
+                          size: 13,
                           color: Colors.grey.shade500,
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          '🔔 Watching',
+                        const SizedBox(width: 4),
+                        Text(
+                          'Price: ${_fmtP(entry.price)}',
                           style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.orange,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                            color: Colors.grey.shade500,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.smart_toy_rounded,
+                          size: 12,
+                          color: Colors.grey.shade500,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          entry.botId.isNotEmpty
+                              ? _botName(entry.botId)
+                              : 'No bot assigned',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text(
+                            '🔔 Watching',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.orange,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
 
-            // ── Remove button ─────────────────────────────
-            GestureDetector(
-              onTap: () => _confirmRemove(entry),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withOpacity(0.3)),
-                ),
-                child: const Text(
-                  'Remove',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.redAccent,
-                    fontWeight: FontWeight.w600,
+              // ── Remove button ─────────────────────────────
+              GestureDetector(
+                onTap: () => _confirmRemove(entry),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.withOpacity(0.3)),
+                  ),
+                  child: const Text(
+                    'Remove',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.redAccent,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

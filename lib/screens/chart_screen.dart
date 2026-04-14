@@ -29,7 +29,10 @@ class _PriceRange {
 // CHART SCREEN
 // ══════════════════════════════════════════════════════════
 class ChartScreen extends StatefulWidget {
-  const ChartScreen({super.key});
+  final String? initialSymbol;
+
+  const ChartScreen({super.key, this.initialSymbol});
+
   @override
   State<ChartScreen> createState() => _ChartScreenState();
 }
@@ -166,11 +169,36 @@ class _ChartScreenState extends State<ChartScreen>
   @override
   void initState() {
     super.initState();
-    _symbol = Config.symbols.isNotEmpty ? Config.symbols.first : 'BTCUSDT';
+    _symbol =
+        widget.initialSymbol ??
+        (Config.symbols.isNotEmpty ? Config.symbols.first : 'BTCUSDT');
     _loadAllDrawingsFromStorage().then((_) {
       _fetchHistory();
       _startWebSocket();
     });
+  }
+
+  @override
+  void didUpdateWidget(ChartScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialSymbol != null && widget.initialSymbol != _symbol) {
+      _symbol = widget.initialSymbol!;
+      _loadAllDrawingsFromStorage().then((_) {
+        _fetchHistory();
+        _startWebSocket();
+      });
+    }
+  }
+
+  // ── Public method to change symbol from external screens ────
+  void loadSymbol(String newSymbol) {
+    if (newSymbol != _symbol) {
+      setState(() => _symbol = newSymbol);
+      _loadAllDrawingsFromStorage().then((_) {
+        _fetchHistory();
+        _startWebSocket();
+      });
+    }
   }
 
   @override
