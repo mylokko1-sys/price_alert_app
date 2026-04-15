@@ -11,7 +11,7 @@ import 'package:http/http.dart' as http;
 
 import '../config.dart';
 import '../models/chart_models.dart';
-import '../services/binance_service.dart';
+import '../services/api_service.dart';
 import '../services/binance_websocket_service.dart';
 import '../services/telegram_service.dart';
 import '../services/chart_drawings_storage.dart';
@@ -169,8 +169,7 @@ class _ChartScreenState extends State<ChartScreen>
   @override
   void initState() {
     super.initState();
-    _symbol =
-        widget.initialSymbol ??
+    _symbol = widget.initialSymbol ??
         (Config.symbols.isNotEmpty ? Config.symbols.first : 'BTCUSDT');
     _loadAllDrawingsFromStorage().then((_) {
       _fetchHistory();
@@ -230,7 +229,7 @@ class _ChartScreenState extends State<ChartScreen>
       _isMoving = false;
     });
     try {
-      final candles = await BinanceService.fetchCandlesForChart(
+      final candles = await ApiService.fetchCandlesForChart(
         _symbol,
         _timeframe,
         months: 9,
@@ -342,8 +341,8 @@ class _ChartScreenState extends State<ChartScreen>
     if (_loading || _candles.isEmpty) return;
     setState(() => _refreshing = true);
     try {
-      final price = await BinanceService.getCurrentPrice(_symbol);
-      final recent = await BinanceService.fetchCandlesFrom(
+      final price = await ApiService.getCurrentPrice(_symbol);
+      final recent = await ApiService.fetchCandlesFrom(
         _symbol,
         _timeframe,
         _candles.last.time,
@@ -442,8 +441,7 @@ class _ChartScreenState extends State<ChartScreen>
 
   void _checkDrawnLineAlerts(double current, double prev) {
     if (!_horizLines.any((h) => h.hasAlert) &&
-        !_trendLines.any((t) => t.hasAlert))
-      return;
+        !_trendLines.any((t) => t.hasAlert)) return;
 
     // Use the live candle's timestamp for trend line interpolation
     final now = _candles.isNotEmpty ? _candles.last.time : DateTime.now();
@@ -504,8 +502,7 @@ class _ChartScreenState extends State<ChartScreen>
     if (level == 0) return false;
     // Crossed
     if ((prev < level && current >= level) ||
-        (prev > level && current <= level))
-      return true;
+        (prev > level && current <= level)) return true;
     // Within 0.5% — approaching
     return (current - level).abs() / level.abs() <= 0.0001;
   }
@@ -516,7 +513,7 @@ class _ChartScreenState extends State<ChartScreen>
     required String lineId,
     required String lineType, // 'h' | 't'
     required String
-    lineName, // human-readable: 'Horizontal Line' | 'Trend Line'
+        lineName, // human-readable: 'Horizontal Line' | 'Trend Line'
     required double linePrice,
     required double current,
     required String botId,
@@ -667,9 +664,9 @@ class _ChartScreenState extends State<ChartScreen>
   int get _lastVis => (_candles.isEmpty
       ? 0
       : (_candles.length - 1 - _scrollCandles).round().clamp(
-          0,
-          _candles.length - 1,
-        ));
+            0,
+            _candles.length - 1,
+          ));
 
   double _cX(int idx) {
     final rp = _rightPad * _candleWidth;
@@ -832,13 +829,12 @@ class _ChartScreenState extends State<ChartScreen>
       setState(() {
         _candleWidth = (_gStartCW * d.scale).clamp(2.0, 40.0);
         final maxScroll = (_candles.length - 5).toDouble().clamp(
-          0.0,
-          double.infinity,
-        );
-        _scrollCandles =
-            (_gStartScroll +
-                    (d.localFocalPoint.dx - _gStartFocal.dx) / _candleWidth)
-                .clamp(0.0, maxScroll);
+              0.0,
+              double.infinity,
+            );
+        _scrollCandles = (_gStartScroll +
+                (d.localFocalPoint.dx - _gStartFocal.dx) / _candleWidth)
+            .clamp(0.0, maxScroll);
         _isMoving = false;
       });
       return;
@@ -850,14 +846,14 @@ class _ChartScreenState extends State<ChartScreen>
           -(d.localFocalPoint.dy - _dragStartPos.dy) / _cH * (r.hi - r.lo);
       // Time delta: how many milliseconds does the horizontal drag represent?
       final xDelta = d.localFocalPoint.dx - _dragStartPos.dx;
-      final msDelta = _candles.length >= 2
+      final int msDelta = _candles.length >= 2
           ? (xDelta /
-                    _candleWidth *
-                    (_candles.last.time.millisecondsSinceEpoch -
-                        _candles[_candles.length - 2]
-                            .time
-                            .millisecondsSinceEpoch))
-                .round()
+                  _candleWidth *
+                  (_candles.last.time.millisecondsSinceEpoch -
+                      _candles[_candles.length - 2]
+                          .time
+                          .millisecondsSinceEpoch))
+              .round()
           : 0;
 
       setState(() {
@@ -905,13 +901,12 @@ class _ChartScreenState extends State<ChartScreen>
       setState(() {
         _candleWidth = (_gStartCW * d.scale).clamp(2.0, 40.0);
         final maxScroll = (_candles.length - 5).toDouble().clamp(
-          0.0,
-          double.infinity,
-        );
-        _scrollCandles =
-            (_gStartScroll +
-                    (d.localFocalPoint.dx - _gStartFocal.dx) / _candleWidth)
-                .clamp(0.0, maxScroll);
+              0.0,
+              double.infinity,
+            );
+        _scrollCandles = (_gStartScroll +
+                (d.localFocalPoint.dx - _gStartFocal.dx) / _candleWidth)
+            .clamp(0.0, maxScroll);
         _crosshair = d.localFocalPoint;
         _selectedIdx = _x2idx(d.localFocalPoint.dx);
       });
@@ -1155,8 +1150,7 @@ class _ChartScreenState extends State<ChartScreen>
 
   // ── Bell button for AppBar ────────────────────────────
   Widget _buildBellButton() {
-    final totalAlerts =
-        _horizLines.where((h) => h.hasAlert).length +
+    final totalAlerts = _horizLines.where((h) => h.hasAlert).length +
         _trendLines.where((t) => t.hasAlert).length;
     return GestureDetector(
       onTap: _openAlertManager,
@@ -1188,9 +1182,8 @@ class _ChartScreenState extends State<ChartScreen>
                         ? Icons.notifications_active_rounded
                         : Icons.notifications_none_rounded,
                     size: 16,
-                    color: totalAlerts > 0
-                        ? Colors.orange
-                        : Colors.grey.shade500,
+                    color:
+                        totalAlerts > 0 ? Colors.orange : Colors.grey.shade500,
                   ),
                   if (totalAlerts > 0) ...[
                     const SizedBox(width: 4),
@@ -1215,8 +1208,8 @@ class _ChartScreenState extends State<ChartScreen>
   PreferredSizeWidget _buildAppBar() {
     final liveColor = _candles.isNotEmpty
         ? (_candles.last.close >= _candles.last.open
-              ? const Color(0xFF26A69A)
-              : const Color(0xFFEF5350))
+            ? const Color(0xFF26A69A)
+            : const Color(0xFFEF5350))
         : Colors.grey;
     final displayPrice =
         _livePrice ?? (_candles.isNotEmpty ? _candles.last.close : null);
@@ -1289,8 +1282,8 @@ class _ChartScreenState extends State<ChartScreen>
                   color: _wsLive
                       ? const Color(0xFF26A69A)
                       : _refreshing
-                      ? Colors.orange
-                      : Colors.grey,
+                          ? Colors.orange
+                          : Colors.grey,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -1342,9 +1335,8 @@ class _ChartScreenState extends State<ChartScreen>
                       ? Colors.blueAccent.withOpacity(0.9)
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(4),
-                  border: sel
-                      ? null
-                      : Border.all(color: const Color(0xFF2A2A40)),
+                  border:
+                      sel ? null : Border.all(color: const Color(0xFF2A2A40)),
                 ),
                 child: Text(
                   tf,
@@ -1657,9 +1649,8 @@ class _ChartScreenState extends State<ChartScreen>
               horizLines: List.unmodifiable(_horizLines),
               pendingIdx: _pendingIdx,
               pendingPrice: _pendingPrice,
-              pendingScreen: (_pendingIdx != null && _touchPos != null)
-                  ? _touchPos
-                  : null,
+              pendingScreen:
+                  (_pendingIdx != null && _touchPos != null) ? _touchPos : null,
               selectedId: _selId,
               rangeLo: r.lo,
               rangeHi: r.hi,
@@ -1689,8 +1680,7 @@ class _ChartScreenState extends State<ChartScreen>
     final isBull = c.close >= c.open;
     final col = isBull ? const Color(0xFF26A69A) : const Color(0xFFEF5350);
     final chg = (c.close - c.open) / c.open * 100;
-    final date =
-        '${c.time.year}-${_p2(c.time.month)}-${_p2(c.time.day)}'
+    final date = '${c.time.year}-${_p2(c.time.month)}-${_p2(c.time.day)}'
         ' ${_p2(c.time.hour)}:${_p2(c.time.minute)}';
 
     return Container(
@@ -1743,48 +1733,48 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Widget _ov(String lbl, double v, Color c) => Padding(
-    padding: const EdgeInsets.only(right: 8),
-    child: RichText(
-      text: TextSpan(
-        children: [
-          TextSpan(
-            text: '$lbl ',
-            style: const TextStyle(fontSize: 9, color: Color(0xFF555577)),
+        padding: const EdgeInsets.only(right: 8),
+        child: RichText(
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: '$lbl ',
+                style: const TextStyle(fontSize: 9, color: Color(0xFF555577)),
+              ),
+              TextSpan(
+                text: _fmtP(v),
+                style: TextStyle(
+                  fontSize: 9.5,
+                  color: c,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
-          TextSpan(
-            text: _fmtP(v),
-            style: TextStyle(
-              fontSize: 9.5,
-              color: c,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
+        ),
+      );
 
   Widget _ovVol(String lbl, double v) => Padding(
-    padding: const EdgeInsets.only(right: 8),
-    child: RichText(
-      text: TextSpan(
-        children: [
-          TextSpan(
-            text: '$lbl ',
-            style: const TextStyle(fontSize: 9, color: Color(0xFF555577)),
+        padding: const EdgeInsets.only(right: 8),
+        child: RichText(
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: '$lbl ',
+                style: const TextStyle(fontSize: 9, color: Color(0xFF555577)),
+              ),
+              TextSpan(
+                text: _fmtVol(v),
+                style: const TextStyle(
+                  fontSize: 9.5,
+                  color: Color(0xFF888899),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
-          TextSpan(
-            text: _fmtVol(v),
-            style: const TextStyle(
-              fontSize: 9.5,
-              color: Color(0xFF888899),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
+        ),
+      );
 
   String _fmtP(double v) {
     if (v >= 10000) return v.toStringAsFixed(0);
@@ -1819,7 +1809,7 @@ class _HitResult {
 class _AlertManagerSheet extends StatefulWidget {
   final String currentSymbol;
   final List<TrendLineData>
-  trendLines; // current symbol's lines (for All Lines tab)
+      trendLines; // current symbol's lines (for All Lines tab)
   final List<HorizLineData> horizLines;
   final Map<String, List<TrendLineData>> allTlBySymbol; // all symbols
   final Map<String, List<HorizLineData>> allHlBySymbol;
@@ -1896,31 +1886,31 @@ class _AlertManagerSheetState extends State<_AlertManagerSheet>
 
   /// Build entries for the current symbol's All Lines tab
   List<_LineEntry> _currentEntries() => [
-    ...widget.trendLines.map(
-      (tl) => _LineEntry(
-        id: tl.id,
-        type: 't',
-        label: 'Trend Line',
-        symbol: widget.currentSymbol,
-        price: tl.priceAtTime(tl.time2),
-        hasAlert: tl.hasAlert,
-        color: tl.color,
-        botId: tl.botId,
-      ),
-    ),
-    ...widget.horizLines.map(
-      (hl) => _LineEntry(
-        id: hl.id,
-        type: 'h',
-        label: 'H-Line',
-        symbol: widget.currentSymbol,
-        price: hl.price,
-        hasAlert: hl.hasAlert,
-        color: hl.color,
-        botId: hl.botId,
-      ),
-    ),
-  ];
+        ...widget.trendLines.map(
+          (tl) => _LineEntry(
+            id: tl.id,
+            type: 't',
+            label: 'Trend Line',
+            symbol: widget.currentSymbol,
+            price: tl.priceAtTime(tl.time2),
+            hasAlert: tl.hasAlert,
+            color: tl.color,
+            botId: tl.botId,
+          ),
+        ),
+        ...widget.horizLines.map(
+          (hl) => _LineEntry(
+            id: hl.id,
+            type: 'h',
+            label: 'H-Line',
+            symbol: widget.currentSymbol,
+            price: hl.price,
+            hasAlert: hl.hasAlert,
+            color: hl.color,
+            botId: hl.botId,
+          ),
+        ),
+      ];
 
   /// Build entries for ALL symbols that have alerts set
   List<_LineEntry> _allActiveEntries() {
@@ -2116,16 +2106,15 @@ class _AlertManagerSheetState extends State<_AlertManagerSheet>
                             final botId = entry.botId;
                             return _ActiveAlertCard(
                               entry: entry,
-                              botName: botId.isNotEmpty
-                                  ? _botName(botId)
-                                  : 'No bot',
+                              botName:
+                                  botId.isNotEmpty ? _botName(botId) : 'No bot',
                               fmtP: _fmtP,
                               // Only allow remove for current symbol's lines
                               onRemove: entry.symbol == widget.currentSymbol
                                   ? () => widget.onDeactivate(
-                                      entry.id,
-                                      entry.type,
-                                    )
+                                        entry.id,
+                                        entry.type,
+                                      )
                                   : null,
                             );
                           },
@@ -2185,51 +2174,52 @@ class _AlertManagerSheetState extends State<_AlertManagerSheet>
     required IconData icon,
     required String title,
     required String subtitle,
-  }) => Center(
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(icon, size: 52, color: Colors.grey.shade800),
-        const SizedBox(height: 14),
-        Text(
-          title,
-          style: const TextStyle(
-            color: Colors.grey,
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
+  }) =>
+      Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 52, color: Colors.grey.shade800),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.grey,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+            ),
+          ],
         ),
-        const SizedBox(height: 6),
-        Text(
-          subtitle,
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
-        ),
-      ],
-    ),
-  );
+      );
 
   Widget _buildNoBotWarning() => Container(
-    margin: const EdgeInsets.only(bottom: 10),
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: Colors.orange.withOpacity(0.08),
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: Colors.orange.withOpacity(0.35)),
-    ),
-    child: const Row(
-      children: [
-        Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 16),
-        SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            'No configured Telegram bots found. Add one in Bot Settings.',
-            style: TextStyle(fontSize: 12, color: Colors.orange),
-          ),
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.orange.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.orange.withOpacity(0.35)),
         ),
-      ],
-    ),
-  );
+        child: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 16),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'No configured Telegram bots found. Add one in Bot Settings.',
+                style: TextStyle(fontSize: 12, color: Colors.orange),
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 // ── Active alert card (Tab 0) ─────────────────────────────
@@ -2665,9 +2655,8 @@ class _LineActionsSheetState extends State<_LineActionsSheet> {
   @override
   void initState() {
     super.initState();
-    _selectedBotId = widget.currentBotId.isNotEmpty
-        ? widget.currentBotId
-        : _defaultBot();
+    _selectedBotId =
+        widget.currentBotId.isNotEmpty ? widget.currentBotId : _defaultBot();
   }
 
   String _defaultBot() {
@@ -2771,9 +2760,8 @@ class _LineActionsSheetState extends State<_LineActionsSheet> {
                   Icon(
                     Icons.notifications_rounded,
                     size: 15,
-                    color: widget.hasAlert
-                        ? Colors.orange
-                        : Colors.grey.shade500,
+                    color:
+                        widget.hasAlert ? Colors.orange : Colors.grey.shade500,
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -3039,67 +3027,68 @@ class _ToolBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Stack(
-      clipBehavior: Clip.none,
-      children: [
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: active
-                ? Colors.blueAccent.withOpacity(0.18)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(
-              color: active
-                  ? Colors.blueAccent.withOpacity(0.7)
-                  : Colors.grey.shade800,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 15,
-                color: active ? Colors.blueAccent : Colors.grey.shade500,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w600,
-                  color: active ? Colors.blueAccent : Colors.grey.shade500,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (badge != null)
-          Positioned(
-            top: -4,
-            right: -4,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        onTap: onTap,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: Colors.orange,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                badge!,
-                style: const TextStyle(
-                  fontSize: 8,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                color: active
+                    ? Colors.blueAccent.withOpacity(0.18)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(
+                  color: active
+                      ? Colors.blueAccent.withOpacity(0.7)
+                      : Colors.grey.shade800,
                 ),
               ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    icon,
+                    size: 15,
+                    color: active ? Colors.blueAccent : Colors.grey.shade500,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: active ? Colors.blueAccent : Colors.grey.shade500,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-      ],
-    ),
-  );
+            if (badge != null)
+              Positioned(
+                top: -4,
+                right: -4,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.orange,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    badge!,
+                    style: const TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
 }
 
 // ══════════════════════════════════════════════════════════
@@ -3193,12 +3182,11 @@ class _PairSheetState extends State<_PairSheet> {
       final res = await http.get(uri).timeout(const Duration(seconds: 10));
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body) as Map<String, dynamic>;
-        final symbols =
-            (body['symbols'] as List)
-                .where((s) => s['status'] == 'TRADING')
-                .map((s) => s['symbol'] as String)
-                .toList()
-              ..sort();
+        final symbols = (body['symbols'] as List)
+            .where((s) => s['status'] == 'TRADING')
+            .map((s) => s['symbol'] as String)
+            .toList()
+          ..sort();
         _allBinanceSymbols = symbols;
         _symbolsLoaded = true;
       }
@@ -3222,9 +3210,8 @@ class _PairSheetState extends State<_PairSheet> {
     // Priority: exact start match → contains match
     final searchPool = _symbolsLoaded ? _allBinanceSymbols : base;
     final startMatch = searchPool.where((s) => s.startsWith(q)).toList();
-    final contains = searchPool
-        .where((s) => s.contains(q) && !s.startsWith(q))
-        .toList();
+    final contains =
+        searchPool.where((s) => s.contains(q) && !s.startsWith(q)).toList();
     final results = [...startMatch, ...contains];
 
     // Always show watchlist matches at the very top
@@ -3507,12 +3494,10 @@ class _PairSheetState extends State<_PairSheet> {
                               Text(
                                 base.isNotEmpty ? base : sym,
                                 style: TextStyle(
-                                  color: isCur
-                                      ? Colors.blueAccent
-                                      : Colors.white,
-                                  fontWeight: isCur
-                                      ? FontWeight.bold
-                                      : FontWeight.w500,
+                                  color:
+                                      isCur ? Colors.blueAccent : Colors.white,
+                                  fontWeight:
+                                      isCur ? FontWeight.bold : FontWeight.w500,
                                   fontSize: 14,
                                 ),
                               ),
@@ -3624,9 +3609,9 @@ class _ChartPainter extends CustomPainter {
     final rp = rightPad * candleWidth;
 
     final lastVis = (candles.length - 1 - scrollCandles).round().clamp(
-      0,
-      candles.length - 1,
-    );
+          0,
+          candles.length - 1,
+        );
     final nVis = ((cW - rp) / candleWidth).ceil() + 2;
     final firstVis = (lastVis - nVis).clamp(0, candles.length - 1);
     if (firstVis > lastVis) return;

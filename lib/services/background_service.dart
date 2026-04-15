@@ -13,7 +13,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config.dart';
 import '../models/chart_models.dart';
-import 'binance_service.dart';
+import 'api_service.dart';
 import 'candle_pattern_service.dart';
 import 'chart_drawings_storage.dart';
 import 'pivot_service.dart';
@@ -38,7 +38,8 @@ Future<void> initBackgroundService() async {
       FlutterLocalNotificationsPlugin();
   await plugin
       .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>()
+        AndroidFlutterLocalNotificationsPlugin
+      >()
       ?.createNotificationChannel(channel);
 
   await service.configure(
@@ -185,7 +186,8 @@ Future<void> _runAllChecks(ServiceInstance service) async {
     await prefs.reload();
     final timeframes = Config.effectiveTimeframes;
     final now = DateTime.now();
-    final timeStr = '${now.hour.toString().padLeft(2, '0')}:'
+    final timeStr =
+        '${now.hour.toString().padLeft(2, '0')}:'
         '${now.minute.toString().padLeft(2, '0')}';
 
     if (service is AndroidServiceInstance) {
@@ -230,7 +232,10 @@ Future<void> _checkHHLL(
   ServiceInstance service,
 ) async {
   try {
-    final candles = await BinanceService.fetchCandles(symbol, timeframe);
+    final candles = await ApiService.fetchCandles(
+      symbol: symbol,
+      interval: timeframe,
+    );
     if (candles.length < 2) return;
 
     final result = PivotService.getHHLL(candles);
@@ -242,7 +247,8 @@ Future<void> _checkHHLL(
       final key =
           '${type}_HIT_${symbol}_${timeframe}_${level.toStringAsFixed(5)}';
       if (prefs.getBool(key) ?? false) return;
-      final isHit = PivotService.isHit(lastClosed, level, isHH) ||
+      final isHit =
+          PivotService.isHit(lastClosed, level, isHH) ||
           PivotService.isHit(liveCandle, level, isHH);
       if (!isHit) return;
       final ok = await TelegramService.sendHitAlert(
@@ -321,7 +327,7 @@ Future<void> _checkPriceAlerts(
     if (_shouldStop) break;
 
     final symbol = entry.key;
-    final currentPrice = await BinanceService.getCurrentPrice(symbol);
+    final currentPrice = await ApiService.getCurrentPrice(symbol);
     if (currentPrice == null) {
       print('⚠️ Could not get price for $symbol — skipping');
       continue;
@@ -394,8 +400,9 @@ Future<void> _checkCandlePatternAlerts(
   SharedPreferences prefs,
   ServiceInstance service,
 ) async {
-  final active =
-      Config.candlePatternAlerts.where((a) => a.shouldCheck).toList();
+  final active = Config.candlePatternAlerts
+      .where((a) => a.shouldCheck)
+      .toList();
   if (active.isEmpty) return;
 
   // ── 1. Collect all unique (symbol, timeframe) combos needed ──
@@ -419,7 +426,10 @@ Future<void> _checkCandlePatternAlerts(
     final symbol = parts[0];
     final tf = parts[1];
     try {
-      final candles = await BinanceService.fetchCandles(symbol, tf);
+      final candles = await ApiService.fetchCandles(
+        symbol: symbol,
+        interval: tf,
+      );
       if (candles.length >= 7) {
         candleCache[pair] = candles;
       } else {
@@ -540,7 +550,7 @@ Future<void> _checkChartLineAlerts(
       final bundle = entry.value;
 
       // Get current price for this symbol
-      final currentPrice = await BinanceService.getCurrentPrice(symbol);
+      final currentPrice = await ApiService.getCurrentPrice(symbol);
       if (currentPrice == null) {
         print(
           '⚠️ Could not get current price for $symbol — skipping chart lines',

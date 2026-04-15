@@ -7,6 +7,28 @@ import 'dart:convert';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// ══════════════════════════════════════════════════════════
+// ─── API PROVIDERS ───────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+enum ApiProvider {
+  binance('Binance'),
+  okx('OKX'),
+  bybit('ByBit'),
+  kucoin('KuCoin'),
+  kraken('Kraken');
+
+  final String displayName;
+  const ApiProvider(this.displayName);
+
+  static ApiProvider fromString(String? value) {
+    if (value == null || value.isEmpty) return binance;
+    return ApiProvider.values.firstWhere(
+      (p) => p.name == value,
+      orElse: () => binance,
+    );
+  }
+}
+
 const List<String> kAllTimeframes = [
   '1m',
   '3m',
@@ -297,6 +319,7 @@ class Config {
   static int pivotLen = 5;
   static int limit = 1000;
   static int checkEveryMinutes = 5;
+  static ApiProvider apiProvider = ApiProvider.binance;
   static List<PriceAlert> priceAlerts = [];
   static List<CandlePatternAlert> candlePatternAlerts = [];
 
@@ -330,6 +353,7 @@ class ConfigService {
   static const _kPivotLen = 'cfg_pivot_len';
   static const _kLimit = 'cfg_limit';
   static const _kCheckEvery = 'cfg_check_every';
+  static const _kApiProvider = 'cfg_api_provider';
   static const _kPriceAlerts = 'cfg_price_alerts_v1';
   static const _kCandlePatternAlerts = 'cfg_candle_pattern_alerts_v1';
 
@@ -406,6 +430,7 @@ class ConfigService {
     Config.limit = prefs.getInt(_kLimit) ?? Config.limit;
     Config.checkEveryMinutes =
         prefs.getInt(_kCheckEvery) ?? Config.checkEveryMinutes;
+    Config.apiProvider = ApiProvider.fromString(prefs.getString(_kApiProvider));
   }
 
   static Future<void> _pushToBackground() async {
@@ -417,6 +442,7 @@ class ConfigService {
       'pivotLen': Config.pivotLen,
       'limit': Config.limit,
       'checkEveryMinutes': Config.checkEveryMinutes,
+      'apiProvider': Config.apiProvider.name,
       'priceAlerts': Config.priceAlerts.map((a) => a.toJson()).toList(),
       'candlePatternAlerts': Config.candlePatternAlerts
           .map((a) => a.toJson())
@@ -483,10 +509,17 @@ class ConfigService {
     await _pushToBackground();
   }
 
-  static Future<void> saveBotSettings({required int checkEveryMinutes}) async {
+  static Future<void> saveBotSettings({
+    required int checkEveryMinutes,
+    ApiProvider? apiProvider,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_kCheckEvery, checkEveryMinutes);
     Config.checkEveryMinutes = checkEveryMinutes;
+    if (apiProvider != null) {
+      await prefs.setString(_kApiProvider, apiProvider.name);
+      Config.apiProvider = apiProvider;
+    }
     await _pushToBackground();
   }
 

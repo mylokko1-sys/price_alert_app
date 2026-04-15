@@ -5,7 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../config.dart';
-import '../services/binance_service.dart';
+import '../services/api_service.dart';
 import '../services/telegram_service.dart';
 
 // ══════════════════════════════════════════════════════════
@@ -46,20 +46,24 @@ class _TelegramBotsPageState extends State<TelegramBotsPage> {
     if (updated != null && mounted) {
       setState(() {
         final idx = _bots.indexWhere((b) => b.id == updated.id);
-        if (idx >= 0) _bots[idx] = updated;
-        else _bots.add(updated);
+        if (idx >= 0)
+          _bots[idx] = updated;
+        else
+          _bots.add(updated);
       });
     }
   }
 
-  void _addBot() => _openEdit(TelegramBot(
-    id:            DateTime.now().millisecondsSinceEpoch.toString(),
-    name:          'Bot ${_bots.length + 1}',
-    token:         '',
-    chatId:        '',
-    hitTimeframes: ['1h'],
-    newTimeframes: [],
-  ));
+  void _addBot() => _openEdit(
+    TelegramBot(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      name: 'Bot ${_bots.length + 1}',
+      token: '',
+      chatId: '',
+      hitTimeframes: ['1h'],
+      newTimeframes: [],
+    ),
+  );
 
   void _deleteBot(String id) {
     if (_bots.length <= 1) {
@@ -72,15 +76,19 @@ class _TelegramBotsPageState extends State<TelegramBotsPage> {
         title: const Text('Delete Bot'),
         content: const Text('Are you sure you want to delete this bot?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               setState(() => _bots.removeWhere((b) => b.id == id));
             },
-            child: const Text('Delete',
-                style: TextStyle(color: Colors.redAccent)),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.redAccent),
+            ),
           ),
         ],
       ),
@@ -88,14 +96,15 @@ class _TelegramBotsPageState extends State<TelegramBotsPage> {
   }
 
   void _snack(String msg, {required bool isError}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor:
-          isError ? Colors.red.shade700 : Colors.green.shade700,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      margin: const EdgeInsets.all(12),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(12),
+      ),
+    );
   }
 
   @override
@@ -106,18 +115,21 @@ class _TelegramBotsPageState extends State<TelegramBotsPage> {
         children: [
           _InfoBanner(
             icon: Icons.smart_toy_rounded,
-            text: 'Each bot can subscribe to different timeframes per alert type. '
+            text:
+                'Each bot can subscribe to different timeframes per alert type. '
                 '"Hit" fires when price touches a level. '
                 '"New Level" fires when a fresh HH/LL pivot forms.',
           ),
           const SizedBox(height: 16),
 
-          ..._bots.asMap().entries.map((e) => _BotCard(
-                bot:      e.value,
-                index:    e.key,
-                onEdit:   () => _openEdit(e.value),
-                onDelete: () => _deleteBot(e.value.id),
-              )),
+          ..._bots.asMap().entries.map(
+            (e) => _BotCard(
+              bot: e.value,
+              index: e.key,
+              onEdit: () => _openEdit(e.value),
+              onDelete: () => _deleteBot(e.value.id),
+            ),
+          ),
 
           const SizedBox(height: 12),
 
@@ -132,7 +144,8 @@ class _TelegramBotsPageState extends State<TelegramBotsPage> {
                 foregroundColor: Colors.blueAccent,
                 side: const BorderSide(color: Colors.blueAccent),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ),
@@ -148,11 +161,15 @@ class _TelegramBotsPageState extends State<TelegramBotsPage> {
 // ─── Bot summary card ─────────────────────────────────────
 class _BotCard extends StatefulWidget {
   final TelegramBot bot;
-  final int         index;
+  final int index;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  const _BotCard({required this.bot, required this.index,
-      required this.onEdit, required this.onDelete});
+  const _BotCard({
+    required this.bot,
+    required this.index,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
   State<_BotCard> createState() => _BotCardState();
@@ -166,31 +183,40 @@ class _BotCardState extends State<_BotCard> {
     final error = await TelegramService.testConnection(widget.bot);
     setState(() => _testing = false);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Row(children: [
-        Icon(error == null ? Icons.check_circle : Icons.error_outline,
-            color: Colors.white, size: 18),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(error == null
-              ? '✅ Test sent to ${widget.bot.name}!'
-              : '❌ ${widget.bot.name}: $error'),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              error == null ? Icons.check_circle : Icons.error_outline,
+              color: Colors.white,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                error == null
+                    ? '✅ Test sent to ${widget.bot.name}!'
+                    : '❌ ${widget.bot.name}: $error',
+              ),
+            ),
+          ],
         ),
-      ]),
-      backgroundColor:
-          error == null ? Colors.green.shade700 : Colors.red.shade700,
-      behavior: SnackBarBehavior.floating,
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      margin: const EdgeInsets.all(12),
-      duration: Duration(seconds: error == null ? 3 : 5),
-    ));
+        backgroundColor: error == null
+            ? Colors.green.shade700
+            : Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(12),
+        duration: Duration(seconds: error == null ? 3 : 5),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bot    = widget.bot;
+    final bot = widget.bot;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -211,33 +237,42 @@ class _BotCardState extends State<_BotCard> {
           Row(
             children: [
               Container(
-                width: 32, height: 32,
+                width: 32,
+                height: 32,
                 decoration: BoxDecoration(
                   color: Colors.blueAccent.withOpacity(0.15),
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
-                child: Text('${widget.index + 1}',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blueAccent,
-                        fontSize: 14)),
+                child: Text(
+                  '${widget.index + 1}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blueAccent,
+                    fontSize: 14,
+                  ),
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(bot.name,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 15)),
                     Text(
-                      bot.isConfigured ? 'Configured ✓' : '⚠ Not yet configured',
+                      bot.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    Text(
+                      bot.isConfigured
+                          ? 'Configured ✓'
+                          : '⚠ Not yet configured',
                       style: TextStyle(
-                          fontSize: 11,
-                          color: bot.isConfigured
-                              ? Colors.green
-                              : Colors.orange),
+                        fontSize: 11,
+                        color: bot.isConfigured ? Colors.green : Colors.orange,
+                      ),
                     ),
                   ],
                 ),
@@ -287,10 +322,9 @@ class _BotCardState extends State<_BotCard> {
             Text(
               'Token: ${_mask(bot.token)}',
               style: TextStyle(
-                  fontSize: 11,
-                  color: isDark
-                      ? Colors.grey.shade400
-                      : Colors.grey.shade600),
+                fontSize: 11,
+                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+              ),
             ),
           ],
 
@@ -303,20 +337,24 @@ class _BotCardState extends State<_BotCard> {
               onPressed: (bot.isConfigured && !_testing) ? _test : null,
               icon: _testing
                   ? const SizedBox(
-                      width: 14, height: 14,
+                      width: 14,
+                      height: 14,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation(Colors.blueAccent)),
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation(Colors.blueAccent),
+                      ),
                     )
                   : const Icon(Icons.send_rounded, size: 14),
-              label: Text(_testing ? 'Sending...' : 'Test Connection',
-                  style: const TextStyle(fontSize: 12)),
+              label: Text(
+                _testing ? 'Sending...' : 'Test Connection',
+                style: const TextStyle(fontSize: 12),
+              ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.blueAccent,
                 side: const BorderSide(color: Colors.blueAccent),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ),
@@ -325,8 +363,9 @@ class _BotCardState extends State<_BotCard> {
     );
   }
 
-  String _mask(String s) =>
-      s.length <= 8 ? '****' : '${s.substring(0, 4)}...${s.substring(s.length - 4)}';
+  String _mask(String s) => s.length <= 8
+      ? '****'
+      : '${s.substring(0, 4)}...${s.substring(s.length - 4)}';
 }
 
 // ─── Manual alert summary row ─────────────────────────────
@@ -342,26 +381,32 @@ class _ManualAlertSummaryRow extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: enabled ? color.withOpacity(0.12) : Colors.grey.withOpacity(0.08),
+            color: enabled
+                ? color.withOpacity(0.12)
+                : Colors.grey.withOpacity(0.08),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: enabled ? color.withOpacity(0.4) : Colors.grey.withOpacity(0.25),
+              color: enabled
+                  ? color.withOpacity(0.4)
+                  : Colors.grey.withOpacity(0.25),
             ),
           ),
           child: Text(
             '🔔 Manual alerts',
             style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: enabled ? color : Colors.grey),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: enabled ? color : Colors.grey,
+            ),
           ),
         ),
         const SizedBox(width: 8),
         Text(
           enabled ? 'Enabled' : 'Off',
           style: TextStyle(
-              fontSize: 11,
-              color: enabled ? color : Colors.grey.shade500),
+            fontSize: 11,
+            color: enabled ? color : Colors.grey.shade500,
+          ),
         ),
       ],
     );
@@ -370,12 +415,16 @@ class _ManualAlertSummaryRow extends StatelessWidget {
 
 // ─── Timeframe summary row ────────────────────────────────
 class _TfSummaryRow extends StatelessWidget {
-  final String       emoji;
-  final String       label;
+  final String emoji;
+  final String label;
   final List<String> timeframes;
-  final Color        color;
-  const _TfSummaryRow({required this.emoji, required this.label,
-      required this.timeframes, required this.color});
+  final Color color;
+  const _TfSummaryRow({
+    required this.emoji,
+    required this.label,
+    required this.timeframes,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -385,18 +434,23 @@ class _TfSummaryRow extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: enabled ? color.withOpacity(0.12) : Colors.grey.withOpacity(0.08),
+            color: enabled
+                ? color.withOpacity(0.12)
+                : Colors.grey.withOpacity(0.08),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: enabled ? color.withOpacity(0.4) : Colors.grey.withOpacity(0.25),
+              color: enabled
+                  ? color.withOpacity(0.4)
+                  : Colors.grey.withOpacity(0.25),
             ),
           ),
           child: Text(
             '$emoji $label',
             style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: enabled ? color : Colors.grey),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: enabled ? color : Colors.grey,
+            ),
           ),
         ),
         const SizedBox(width: 8),
@@ -405,24 +459,33 @@ class _TfSummaryRow extends StatelessWidget {
               ? Wrap(
                   spacing: 4,
                   runSpacing: 4,
-                  children: timeframes.map((tf) => Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(tf,
-                        style: TextStyle(
-                            fontSize: 10,
-                            color: color,
-                            fontWeight: FontWeight.w600)),
-                  )).toList(),
+                  children: timeframes
+                      .map(
+                        (tf) => Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: color.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            tf,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: color,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
                 )
-              : Text('Off',
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey.shade500)),
+              : Text(
+                  'Off',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                ),
         ),
       ],
     );
@@ -449,17 +512,17 @@ class _BotEditSheetState extends State<_BotEditSheet> {
   late List<String> _newTimeframes;
   late bool _manualAlerts;
   bool _obscureToken = true;
-  bool _testing      = false;
+  bool _testing = false;
 
   @override
   void initState() {
     super.initState();
-    _nameCtrl       = TextEditingController(text: widget.bot.name);
-    _tokenCtrl      = TextEditingController(text: widget.bot.token);
-    _chatCtrl       = TextEditingController(text: widget.bot.chatId);
-    _hitTimeframes  = List.from(widget.bot.hitTimeframes);
-    _newTimeframes  = List.from(widget.bot.newTimeframes);
-    _manualAlerts   = widget.bot.canReceiveManualAlerts;
+    _nameCtrl = TextEditingController(text: widget.bot.name);
+    _tokenCtrl = TextEditingController(text: widget.bot.token);
+    _chatCtrl = TextEditingController(text: widget.bot.chatId);
+    _hitTimeframes = List.from(widget.bot.hitTimeframes);
+    _newTimeframes = List.from(widget.bot.newTimeframes);
+    _manualAlerts = widget.bot.canReceiveManualAlerts;
   }
 
   @override
@@ -471,11 +534,11 @@ class _BotEditSheetState extends State<_BotEditSheet> {
   }
 
   TelegramBot _buildBot() => widget.bot.copyWith(
-    name:                   _nameCtrl.text.trim(),
-    token:                  _tokenCtrl.text.trim(),
-    chatId:                 _chatCtrl.text.trim(),
-    hitTimeframes:          List.from(_hitTimeframes),
-    newTimeframes:          List.from(_newTimeframes),
+    name: _nameCtrl.text.trim(),
+    token: _tokenCtrl.text.trim(),
+    chatId: _chatCtrl.text.trim(),
+    hitTimeframes: List.from(_hitTimeframes),
+    newTimeframes: List.from(_newTimeframes),
     canReceiveManualAlerts: _manualAlerts,
   );
 
@@ -485,36 +548,52 @@ class _BotEditSheetState extends State<_BotEditSheet> {
     final error = await TelegramService.testConnection(_buildBot());
     setState(() => _testing = false);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Row(children: [
-        Icon(error == null ? Icons.check_circle : Icons.error_outline,
-            color: Colors.white, size: 18),
-        const SizedBox(width: 8),
-        Expanded(
-            child: Text(error == null
-                ? '✅ Test message sent! Check Telegram.'
-                : '❌ Failed: $error')),
-      ]),
-      backgroundColor:
-          error == null ? Colors.green.shade700 : Colors.red.shade700,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      margin: const EdgeInsets.all(12),
-      duration: Duration(seconds: error == null ? 3 : 5),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              error == null ? Icons.check_circle : Icons.error_outline,
+              color: Colors.white,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                error == null
+                    ? '✅ Test message sent! Check Telegram.'
+                    : '❌ Failed: $error',
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: error == null
+            ? Colors.green.shade700
+            : Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(12),
+        duration: Duration(seconds: error == null ? 3 : 5),
+      ),
+    );
   }
 
   void _save() {
     if (!_formKey.currentState!.validate()) return;
     if (_hitTimeframes.isEmpty && _newTimeframes.isEmpty && !_manualAlerts) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text(
-            'Enable at least one alert type: Hit, New Level, or Manual Alerts.'),
-        backgroundColor: Colors.orange.shade700,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(12),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Enable at least one alert type: Hit, New Level, or Manual Alerts.',
+          ),
+          backgroundColor: Colors.orange.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          margin: const EdgeInsets.all(12),
+        ),
+      );
       return;
     }
     Navigator.pop(context, _buildBot());
@@ -522,13 +601,13 @@ class _BotEditSheetState extends State<_BotEditSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark     = Theme.of(context).brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final sheetColor = isDark ? const Color(0xFF1E1E2E) : Colors.white;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.93,
-      minChildSize:     0.5,
-      maxChildSize:     0.97,
+      minChildSize: 0.5,
+      maxChildSize: 0.97,
       builder: (_, controller) => Container(
         decoration: BoxDecoration(
           color: sheetColor,
@@ -538,7 +617,8 @@ class _BotEditSheetState extends State<_BotEditSheet> {
           children: [
             const SizedBox(height: 12),
             Container(
-              width: 40, height: 4,
+              width: 40,
+              height: 4,
               decoration: BoxDecoration(
                 color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(2),
@@ -548,14 +628,19 @@ class _BotEditSheetState extends State<_BotEditSheet> {
               padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
               child: Row(
                 children: [
-                  const Icon(Icons.smart_toy_rounded,
-                      color: Colors.blueAccent, size: 22),
+                  const Icon(
+                    Icons.smart_toy_rounded,
+                    color: Colors.blueAccent,
+                    size: 22,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       widget.bot.token.isEmpty ? 'Add New Bot' : 'Edit Bot',
                       style: const TextStyle(
-                          fontSize: 17, fontWeight: FontWeight.bold),
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   IconButton(
@@ -576,16 +661,14 @@ class _BotEditSheetState extends State<_BotEditSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-
                       // ── Name ───────────────────────────
                       const _FieldLabel('Bot Name'),
                       _StyledField(
                         controller: _nameCtrl,
                         hint: 'e.g. Price Alert Bot',
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty)
-                                ? 'Name is required'
-                                : null,
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'Name is required'
+                            : null,
                       ),
                       const SizedBox(height: 16),
 
@@ -596,17 +679,18 @@ class _BotEditSheetState extends State<_BotEditSheet> {
                         hint: 'e.g. 123456:ABC-DEF...',
                         obscure: _obscureToken,
                         suffixIcon: IconButton(
-                          icon: Icon(_obscureToken
-                              ? Icons.visibility_off
-                              : Icons.visibility,
-                              size: 20),
-                          onPressed: () => setState(
-                              () => _obscureToken = !_obscureToken),
+                          icon: Icon(
+                            _obscureToken
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                            size: 20,
+                          ),
+                          onPressed: () =>
+                              setState(() => _obscureToken = !_obscureToken),
                         ),
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty)
-                                ? 'Bot token is required'
-                                : null,
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'Bot token is required'
+                            : null,
                         inputType: TextInputType.visiblePassword,
                       ),
                       const SizedBox(height: 16),
@@ -616,10 +700,9 @@ class _BotEditSheetState extends State<_BotEditSheet> {
                       _StyledField(
                         controller: _chatCtrl,
                         hint: 'e.g. -100123456789',
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty)
-                                ? 'Chat ID is required'
-                                : null,
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'Chat ID is required'
+                            : null,
                         inputType: TextInputType.number,
                       ),
                       const SizedBox(height: 28),
@@ -628,19 +711,22 @@ class _BotEditSheetState extends State<_BotEditSheet> {
                       // ALERT TYPE 1: HIT
                       // ══════════════════════════════════
                       _AlertTypeSection(
-                        emoji:        '🎯',
-                        title:        'Hit Alert Timeframes',
-                        subtitle:     'Alert when price touches an existing HH/LL level on these timeframes.',
-                        color:        Colors.orange,
-                        selected:     _hitTimeframes,
-                        onToggle:     (tf) => setState(() {
+                        emoji: '🎯',
+                        title: 'Hit Alert Timeframes',
+                        subtitle:
+                            'Alert when price touches an existing HH/LL level on these timeframes.',
+                        color: Colors.orange,
+                        selected: _hitTimeframes,
+                        onToggle: (tf) => setState(() {
                           if (_hitTimeframes.contains(tf)) {
                             _hitTimeframes.remove(tf);
                           } else {
                             _hitTimeframes.add(tf);
-                            _hitTimeframes.sort((a, b) =>
-                                kAllTimeframes.indexOf(a)
-                                    .compareTo(kAllTimeframes.indexOf(b)));
+                            _hitTimeframes.sort(
+                              (a, b) => kAllTimeframes
+                                  .indexOf(a)
+                                  .compareTo(kAllTimeframes.indexOf(b)),
+                            );
                           }
                         }),
                       ),
@@ -650,19 +736,22 @@ class _BotEditSheetState extends State<_BotEditSheet> {
                       // ALERT TYPE 2: NEW LEVEL
                       // ══════════════════════════════════
                       _AlertTypeSection(
-                        emoji:        '✨',
-                        title:        'New Level Timeframes',
-                        subtitle:     'Alert when a brand-new Higher High or Lower Low pivot forms on these timeframes.',
-                        color:        Colors.purple,
-                        selected:     _newTimeframes,
-                        onToggle:     (tf) => setState(() {
+                        emoji: '✨',
+                        title: 'New Level Timeframes',
+                        subtitle:
+                            'Alert when a brand-new Higher High or Lower Low pivot forms on these timeframes.',
+                        color: Colors.purple,
+                        selected: _newTimeframes,
+                        onToggle: (tf) => setState(() {
                           if (_newTimeframes.contains(tf)) {
                             _newTimeframes.remove(tf);
                           } else {
                             _newTimeframes.add(tf);
-                            _newTimeframes.sort((a, b) =>
-                                kAllTimeframes.indexOf(a)
-                                    .compareTo(kAllTimeframes.indexOf(b)));
+                            _newTimeframes.sort(
+                              (a, b) => kAllTimeframes
+                                  .indexOf(a)
+                                  .compareTo(kAllTimeframes.indexOf(b)),
+                            );
                           }
                         }),
                       ),
@@ -672,7 +761,7 @@ class _BotEditSheetState extends State<_BotEditSheet> {
                       // ALERT TYPE 3: MANUAL PRICE ALERTS
                       // ══════════════════════════════════
                       _ManualAlertSection(
-                        enabled:   _manualAlerts,
+                        enabled: _manualAlerts,
                         onChanged: (v) => setState(() => _manualAlerts = v),
                       ),
                       const SizedBox(height: 28),
@@ -685,21 +774,25 @@ class _BotEditSheetState extends State<_BotEditSheet> {
                           onPressed: _testing ? null : _testConnection,
                           icon: _testing
                               ? const SizedBox(
-                                  width: 16, height: 16,
+                                  width: 16,
+                                  height: 16,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
                                     valueColor: AlwaysStoppedAnimation(
-                                        Colors.blueAccent),
+                                      Colors.blueAccent,
+                                    ),
                                   ),
                                 )
                               : const Icon(Icons.send_rounded, size: 18),
                           label: Text(
-                              _testing ? 'Sending test...' : 'Test Connection'),
+                            _testing ? 'Sending test...' : 'Test Connection',
+                          ),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.blueAccent,
                             side: const BorderSide(color: Colors.blueAccent),
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                         ),
                       ),
@@ -726,7 +819,7 @@ class _ManualAlertSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const color  = Colors.teal;
+    const color = Colors.teal;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -749,29 +842,27 @@ class _ManualAlertSection extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Manual Price Alerts',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13.5,
-                        color: enabled ? color : null)),
+                Text(
+                  'Manual Price Alerts',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13.5,
+                    color: enabled ? color : null,
+                  ),
+                ),
                 const SizedBox(height: 2),
                 Text(
                   'This bot can be selected when creating manual\n'
                   'price alerts (cross above / below / touch).',
                   style: TextStyle(
-                      fontSize: 11.5,
-                      color: isDark
-                          ? Colors.grey.shade400
-                          : Colors.grey.shade600),
+                    fontSize: 11.5,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  ),
                 ),
               ],
             ),
           ),
-          Switch(
-            value: enabled,
-            onChanged: onChanged,
-            activeColor: color,
-          ),
+          Switch(value: enabled, onChanged: onChanged, activeColor: color),
         ],
       ),
     );
@@ -780,10 +871,10 @@ class _ManualAlertSection extends StatelessWidget {
 
 // ─── Alert type section with inline timeframe grid ───────
 class _AlertTypeSection extends StatelessWidget {
-  final String       emoji;
-  final String       title;
-  final String       subtitle;
-  final Color        color;
+  final String emoji;
+  final String title;
+  final String subtitle;
+  final Color color;
   final List<String> selected;
   final void Function(String tf) onToggle;
 
@@ -798,7 +889,7 @@ class _AlertTypeSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark   = Theme.of(context).brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isActive = selected.isNotEmpty;
 
     return Container(
@@ -826,18 +917,24 @@ class _AlertTypeSection extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title,
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13.5,
-                            color: isActive ? color : null)),
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13.5,
+                        color: isActive ? color : null,
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Text(subtitle,
-                        style: TextStyle(
-                            fontSize: 11.5,
-                            color: isDark
-                                ? Colors.grey.shade400
-                                : Colors.grey.shade600)),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: isDark
+                            ? Colors.grey.shade400
+                            : Colors.grey.shade600,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -858,9 +955,7 @@ class _AlertTypeSection extends StatelessWidget {
                   fontStyle: selected.isEmpty
                       ? FontStyle.italic
                       : FontStyle.normal,
-                  color: selected.isEmpty
-                      ? Colors.grey
-                      : color,
+                  color: selected.isEmpty ? Colors.grey : color,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -872,10 +967,13 @@ class _AlertTypeSection extends StatelessWidget {
                       onToggle(tf);
                     }
                   },
-                  child: Text('Clear all',
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.redAccent.withOpacity(0.8))),
+                  child: Text(
+                    'Clear all',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.redAccent.withOpacity(0.8),
+                    ),
+                  ),
                 ),
               ],
             ],
@@ -894,28 +992,29 @@ class _AlertTypeSection extends StatelessWidget {
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 160),
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: sel
                         ? color
-                        : (isDark
-                            ? const Color(0xFF2A2A3E)
-                            : Colors.white),
+                        : (isDark ? const Color(0xFF2A2A3E) : Colors.white),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: sel
                           ? color
                           : (isDark
-                              ? Colors.grey.shade600
-                              : Colors.grey.shade300),
+                                ? Colors.grey.shade600
+                                : Colors.grey.shade300),
                       width: sel ? 1.5 : 1,
                     ),
                     boxShadow: sel
                         ? [
                             BoxShadow(
-                                color: color.withOpacity(0.25),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2))
+                              color: color.withOpacity(0.25),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
                           ]
                         : null,
                   ),
@@ -927,8 +1026,8 @@ class _AlertTypeSection extends StatelessWidget {
                       color: sel
                           ? Colors.white
                           : (isDark
-                              ? Colors.grey.shade300
-                              : Colors.grey.shade700),
+                                ? Colors.grey.shade300
+                                : Colors.grey.shade700),
                     ),
                   ),
                 ),
@@ -953,11 +1052,10 @@ class TradingPairsSettingsPage extends StatefulWidget {
       _TradingPairsSettingsPageState();
 }
 
-class _TradingPairsSettingsPageState
-    extends State<TradingPairsSettingsPage> {
+class _TradingPairsSettingsPageState extends State<TradingPairsSettingsPage> {
   late List<String> _symbols;
-  final _addCtrl   = TextEditingController();
-  bool _saving     = false;
+  final _addCtrl = TextEditingController();
+  bool _saving = false;
   bool _validating = false;
   bool _hasChanges = false;
 
@@ -981,12 +1079,15 @@ class _TradingPairsSettingsPageState
       return;
     }
     setState(() => _validating = true);
-    final result = await BinanceService.validateSymbol(val);
+    final result = await ApiService.validateSymbol(val);
     setState(() => _validating = false);
     if (!mounted) return;
     if (!result.isValid) {
-      _snack('❌ "$val" not found on Binance: ${result.error}',
-          isError: true, duration: 4);
+      _snack(
+        '❌ "$val" not found on ${Config.apiProvider.displayName}: ${result.error}',
+        isError: true,
+        duration: 4,
+      );
       return;
     }
     setState(() {
@@ -1002,25 +1103,32 @@ class _TradingPairsSettingsPageState
       _snack('At least one trading pair is required', isError: true);
       return;
     }
-    setState(() { _symbols.remove(symbol); _hasChanges = true; });
+    setState(() {
+      _symbols.remove(symbol);
+      _hasChanges = true;
+    });
   }
 
   void _snack(String msg, {required bool isError, int duration = 2}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor:
-          isError ? Colors.red.shade700 : Colors.green.shade700,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      margin: const EdgeInsets.all(12),
-      duration: Duration(seconds: duration),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(12),
+        duration: Duration(seconds: duration),
+      ),
+    );
   }
 
   Future<void> _save() async {
     setState(() => _saving = true);
     await ConfigService.saveSymbols(_symbols);
-    setState(() { _saving = false; _hasChanges = false; });
+    setState(() {
+      _saving = false;
+      _hasChanges = false;
+    });
     widget.onSaved();
   }
 
@@ -1046,17 +1154,22 @@ class _TradingPairsSettingsPageState
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: Colors.orange.shade400),
               ),
-              child: Row(children: [
-                Icon(Icons.warning_amber_rounded,
-                    color: Colors.orange.shade600, size: 18),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text(
-                    'Save then restart the bot for new pairs to take effect.',
-                    style: TextStyle(fontSize: 12.5, color: Colors.orange),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.orange.shade600,
+                    size: 18,
                   ),
-                ),
-              ]),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Save then restart the bot for new pairs to take effect.',
+                      style: TextStyle(fontSize: 12.5, color: Colors.orange),
+                    ),
+                  ),
+                ],
+              ),
             ),
 
           Row(
@@ -1080,17 +1193,18 @@ class _TradingPairsSettingsPageState
                     backgroundColor: Colors.blueAccent,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     elevation: 0,
                   ),
                   child: _validating
                       ? const SizedBox(
-                          width: 18, height: 18,
+                          width: 18,
+                          height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation(Colors.white),
+                            valueColor: AlwaysStoppedAnimation(Colors.white),
                           ),
                         )
                       : const Icon(Icons.add_rounded, size: 22),
@@ -1105,21 +1219,30 @@ class _TradingPairsSettingsPageState
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: _symbols.map((s) => Chip(
-              label: Text(s,
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600)),
-              deleteIcon: const Icon(Icons.close, size: 16),
-              onDeleted: () => _removePair(s),
-              backgroundColor:
-                  isDark ? const Color(0xFF2A2A3E) : Colors.blue.shade50,
-              side: BorderSide(
-                color: isDark
-                    ? Colors.blueAccent.withOpacity(0.3)
-                    : Colors.blue.shade200,
-              ),
-              deleteIconColor: Colors.redAccent,
-            )).toList(),
+            children: _symbols
+                .map(
+                  (s) => Chip(
+                    label: Text(
+                      s,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    deleteIcon: const Icon(Icons.close, size: 16),
+                    onDeleted: () => _removePair(s),
+                    backgroundColor: isDark
+                        ? const Color(0xFF2A2A3E)
+                        : Colors.blue.shade50,
+                    side: BorderSide(
+                      color: isDark
+                          ? Colors.blueAccent.withOpacity(0.3)
+                          : Colors.blue.shade200,
+                    ),
+                    deleteIconColor: Colors.redAccent,
+                  ),
+                )
+                .toList(),
           ),
 
           const SizedBox(height: 28),
@@ -1166,7 +1289,7 @@ class _IndicatorSettingsPageState extends State<IndicatorSettingsPage> {
     setState(() => _saving = true);
     await ConfigService.saveIndicator(
       pivotLen: int.parse(_pivotCtrl.text.trim()),
-      limit:    int.parse(_limitCtrl.text.trim()),
+      limit: int.parse(_limitCtrl.text.trim()),
     );
     setState(() => _saving = false);
     widget.onSaved();
@@ -1182,7 +1305,8 @@ class _IndicatorSettingsPageState extends State<IndicatorSettingsPage> {
           children: [
             _InfoBanner(
               icon: Icons.tune_rounded,
-              text: 'Pivot Length: how many candles on each side define a pivot point.',
+              text:
+                  'Pivot Length: how many candles on each side define a pivot point.',
             ),
             const SizedBox(height: 20),
             const _FieldLabel('Pivot Length'),
@@ -1236,6 +1360,7 @@ class BotSettingsPage extends StatefulWidget {
 
 class _BotSettingsPageState extends State<BotSettingsPage> {
   late int _checkEvery;
+  late ApiProvider _selectedApiProvider;
   bool _saving = false;
   static const _presets = [1, 3, 5, 10, 15, 30, 60];
 
@@ -1243,11 +1368,15 @@ class _BotSettingsPageState extends State<BotSettingsPage> {
   void initState() {
     super.initState();
     _checkEvery = Config.checkEveryMinutes;
+    _selectedApiProvider = Config.apiProvider;
   }
 
   Future<void> _save() async {
     setState(() => _saving = true);
-    await ConfigService.saveBotSettings(checkEveryMinutes: _checkEvery);
+    await ConfigService.saveBotSettings(
+      checkEveryMinutes: _checkEvery,
+      apiProvider: _selectedApiProvider,
+    );
     setState(() => _saving = false);
     widget.onSaved();
   }
@@ -1263,8 +1392,122 @@ class _BotSettingsPageState extends State<BotSettingsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _InfoBanner(
+            icon: Icons.api_rounded,
+            text:
+                'Configure the trading API provider for your bot. '
+                'Currently using: ${_selectedApiProvider.displayName}',
+          ),
+          const SizedBox(height: 20),
+
+          // ── API Provider Selection ────────────────────────
+          const _FieldLabel('Trading API Provider'),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: ApiProvider.values.map((provider) {
+                final isSelected = _selectedApiProvider == provider;
+                return GestureDetector(
+                  onTap: () => setState(() => _selectedApiProvider = provider),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? Colors.blueAccent.withOpacity(0.1)
+                          : (isDark
+                                ? const Color(0xFF2A2A3E)
+                                : Colors.grey.shade50),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isSelected
+                            ? Colors.blueAccent
+                            : Colors.grey.shade300,
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isSelected
+                                  ? Colors.blueAccent
+                                  : Colors.grey.shade400,
+                              width: 2,
+                            ),
+                          ),
+                          child: isSelected
+                              ? Center(
+                                  child: Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.blueAccent,
+                                    ),
+                                  ),
+                                )
+                              : null,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                provider.displayName,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: isSelected
+                                      ? Colors.blueAccent
+                                      : (isDark
+                                            ? Colors.grey.shade200
+                                            : Colors.grey.shade800),
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                _getApiProviderDescription(provider),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark
+                                      ? Colors.grey.shade500
+                                      : Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+
+          const SizedBox(height: 28),
+          const Divider(thickness: 1),
+          const SizedBox(height: 20),
+
+          _InfoBanner(
             icon: Icons.timer_rounded,
-            text: 'Set how often the bot polls Binance. '
+            text:
+                'Set how often the bot polls the API. '
                 'Currently monitoring: ${tfs.isEmpty ? "none" : tfs.join(", ")}.',
           ),
           const SizedBox(height: 20),
@@ -1273,23 +1516,27 @@ class _BotSettingsPageState extends State<BotSettingsPage> {
           Text(
             'Every $_checkEvery minute${_checkEvery == 1 ? '' : 's'}',
             style: const TextStyle(
-                fontSize: 13,
-                color: Colors.blueAccent,
-                fontWeight: FontWeight.w600),
+              fontSize: 13,
+              color: Colors.blueAccent,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 16),
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
               activeTrackColor: Colors.blueAccent,
-              inactiveTrackColor:
-                  isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+              inactiveTrackColor: isDark
+                  ? Colors.grey.shade800
+                  : Colors.grey.shade200,
               thumbColor: Colors.blueAccent,
               overlayColor: Colors.blueAccent.withOpacity(0.15),
               trackHeight: 4,
             ),
             child: Slider(
               value: _checkEvery.toDouble(),
-              min: 1, max: 60, divisions: 59,
+              min: 1,
+              max: 60,
+              divisions: 59,
               onChanged: (v) => setState(() => _checkEvery = v.round()),
             ),
           ),
@@ -1297,14 +1544,18 @@ class _BotSettingsPageState extends State<BotSettingsPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: const [
               Text('1 min', style: TextStyle(fontSize: 11, color: Colors.grey)),
-              Text('60 min', style: TextStyle(fontSize: 11, color: Colors.grey)),
+              Text(
+                '60 min',
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
             ],
           ),
           const SizedBox(height: 20),
           const _FieldLabel('Quick Presets'),
           const SizedBox(height: 10),
           Wrap(
-            spacing: 8, runSpacing: 8,
+            spacing: 8,
+            runSpacing: 8,
             children: _presets.map((p) {
               final sel = _checkEvery == p;
               return GestureDetector(
@@ -1312,27 +1563,32 @@ class _BotSettingsPageState extends State<BotSettingsPage> {
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 8),
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: sel
                         ? Colors.blueAccent
                         : (isDark
-                            ? const Color(0xFF2A2A3E)
-                            : Colors.grey.shade100),
+                              ? const Color(0xFF2A2A3E)
+                              : Colors.grey.shade100),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: sel ? Colors.blueAccent : Colors.grey.shade600,
                     ),
                   ),
-                  child: Text('${p}m',
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: sel
-                              ? Colors.white
-                              : (isDark
-                                  ? Colors.grey.shade300
-                                  : Colors.grey.shade700))),
+                  child: Text(
+                    '${p}m',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: sel
+                          ? Colors.white
+                          : (isDark
+                                ? Colors.grey.shade300
+                                : Colors.grey.shade700),
+                    ),
+                  ),
                 ),
               );
             }).toList(),
@@ -1342,6 +1598,21 @@ class _BotSettingsPageState extends State<BotSettingsPage> {
         ],
       ),
     );
+  }
+
+  String _getApiProviderDescription(ApiProvider provider) {
+    switch (provider) {
+      case ApiProvider.binance:
+        return 'Largest crypto exchange by volume';
+      case ApiProvider.okx:
+        return 'Multi-chain derivative exchange';
+      case ApiProvider.bybit:
+        return 'Advanced derivatives trading platform';
+      case ApiProvider.kucoin:
+        return 'Community-focused exchange platform';
+      case ApiProvider.kraken:
+        return 'US-based regulated exchange';
+    }
   }
 }
 
@@ -1374,14 +1645,18 @@ class _InfoBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.blueAccent.withOpacity(0.25)),
       ),
-      child: Row(children: [
-        Icon(icon, size: 18, color: Colors.blueAccent),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(text,
-              style: const TextStyle(fontSize: 12.5, color: Colors.blueAccent)),
-        ),
-      ]),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: Colors.blueAccent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 12.5, color: Colors.blueAccent),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1393,11 +1668,14 @@ class _FieldLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Text(label,
-          style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Colors.blueAccent)),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: Colors.blueAccent,
+        ),
+      ),
     );
   }
 }
@@ -1446,27 +1724,32 @@ class _StyledField extends StatelessWidget {
         suffixIcon: suffixIcon,
         filled: true,
         fillColor: isDark ? const Color(0xFF1E1E2E) : Colors.white,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(color: Colors.grey.shade300)),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
         enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(
-                color:
-                    isDark ? Colors.grey.shade700 : Colors.grey.shade300)),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(
+            color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+          ),
+        ),
         focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide:
-                const BorderSide(color: Colors.blueAccent, width: 1.8)),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Colors.blueAccent, width: 1.8),
+        ),
         errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Colors.redAccent)),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Colors.redAccent),
+        ),
         focusedErrorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide:
-                const BorderSide(color: Colors.redAccent, width: 1.8)),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Colors.redAccent, width: 1.8),
+        ),
       ),
       validator: validator,
     );
@@ -1480,27 +1763,31 @@ class _SaveButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: double.infinity, height: 48,
+      width: double.infinity,
+      height: 48,
       child: ElevatedButton(
         onPressed: loading ? null : onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.blueAccent,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
+            borderRadius: BorderRadius.circular(12),
+          ),
           elevation: 0,
         ),
         child: loading
             ? const SizedBox(
-                width: 20, height: 20,
+                width: 20,
+                height: 20,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   valueColor: AlwaysStoppedAnimation(Colors.white),
                 ),
               )
-            : const Text('Save Changes',
-                style: TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w600)),
+            : const Text(
+                'Save Changes',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              ),
       ),
     );
   }
